@@ -1,0 +1,187 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A6933EDB-048F-4D59-A0D8-E6DD23F9EAB2}</ProjectGuid>
+    <RootNamespace>TaksiDll</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v100</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v140</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(VCTargetsPath)Microsoft.CPP.UpgradeFromVC71.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(VCTargetsPath)Microsoft.CPP.UpgradeFromVC71.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>14.0.24730.2</_ProjectFileVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>../../Debug\</OutDir>
+    <IntDir>../Debug\</IntDir>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>../Release\</OutDir>
+    <IntDir>../Release\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;TAKSIDLL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <StringPooling>true</StringPooling>
+      <MinimalRebuild>true</MinimalRebuild>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>../stdafx.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+      <AdditionalIncludeDirectories>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/section:.SHARED,rws %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalDependencies>vfw32.lib;dxguid.lib;winmm.lib;dinput8.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ShowProgress>NotSet</ShowProgress>
+      <OutputFile>$(OutDir)ScreenCapDll.dll</OutputFile>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ProgramDatabaseFile>$(OutDir)ScreenCapDll.pdb</ProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <SubSystem>Windows</SubSystem>
+      <ImportLibrary>$(OutDir)ScreenCapDll.lib</ImportLibrary>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <AdditionalOptions>/force:multiple %(AdditionalOptions)</AdditionalOptions>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;TAKSIDLL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <StringPooling>true</StringPooling>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <PrecompiledHeader />
+      <PrecompiledHeaderFile>../stdafx.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/section:.SHARED,rws /force:multiple %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalDependencies>vfw32.lib;dxguid.lib;winmm.lib;dinput8.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>../../Release/ScreenCapDll.dll</OutputFile>
+      <IgnoreSpecificDefaultLibraries>libc.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <GenerateMapFile>true</GenerateMapFile>
+      <SubSystem>Windows</SubSystem>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <ImportLibrary>../../Release/ScreenCapDll.lib</ImportLibrary>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\common\CAVIFile.cpp" />
+    <ClCompile Include="..\common\CFileDirDlg.cpp" />
+    <ClCompile Include="..\common\CHookJump.cpp" />
+    <ClCompile Include="..\common\CImageGDIP.cpp" />
+    <ClCompile Include="..\common\CIniObject.cpp" />
+    <ClCompile Include="..\common\CLogBase.cpp" />
+    <ClCompile Include="..\common\Common.cpp" />
+    <ClCompile Include="..\common\CWaveACM.cpp" />
+    <ClCompile Include="..\common\CWaveDevice.cpp" />
+    <ClCompile Include="..\common\CWaveFormat.cpp" />
+    <ClCompile Include="..\common\CWndToolTip.cpp" />
+    <ClCompile Include="AVI.cpp" />
+    <ClCompile Include="Avi_Lib\avilib.c" />
+    <ClCompile Include="config.cpp" />
+    <ClCompile Include="graphx.cpp" />
+    <ClCompile Include="graphx_dx8.cpp" />
+    <ClCompile Include="graphx_dx9.cpp" />
+    <ClCompile Include="graphx_gdi.cpp" />
+    <ClCompile Include="graphx_ogl.cpp" />
+    <ClCompile Include="H263Enc.cpp" />
+    <ClCompile Include="HotKeys.cpp" />
+    <ClCompile Include="TaksiDll.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">../stdafx.h</PrecompiledHeaderFile>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\common\CImageGDIPFunc.tbl" />
+    <None Include="..\common\CVideoCodecs.tbl" />
+    <None Include="..\common\CWaveACMFunc.tbl" />
+    <None Include="..\ConfigProps.tbl" />
+    <None Include="..\ProcStatProps.tbl" />
+    <None Include="graphx_ogl.tbl" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="TaksiDll.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\common\CAVIFile.h" />
+    <ClInclude Include="..\common\CDll.h" />
+    <ClInclude Include="..\common\CFileDirDlg.h" />
+    <ClInclude Include="..\common\CHeapBlock.h" />
+    <ClInclude Include="..\common\CHookJump.h" />
+    <ClInclude Include="..\common\CImageGDIP.h" />
+    <ClInclude Include="..\common\CIniObject.h" />
+    <ClInclude Include="..\common\CLogBase.h" />
+    <ClInclude Include="..\common\CNTHandle.h" />
+    <ClInclude Include="..\common\Common.h" />
+    <ClInclude Include="..\common\CRefPtr.h" />
+    <ClInclude Include="..\common\CThreadLockedLong.h" />
+    <ClInclude Include="..\common\CWaveACM.h" />
+    <ClInclude Include="..\common\CWaveDevice.h" />
+    <ClInclude Include="..\common\CWaveFormat.h" />
+    <ClInclude Include="..\common\CWindow.h" />
+    <ClInclude Include="..\common\CWndGDI.h" />
+    <ClInclude Include="..\common\CWndToolTip.h" />
+    <ClInclude Include="..\common\glext.h" />
+    <ClInclude Include="..\common\IRefPtr.h" />
+    <ClInclude Include="..\Config.h" />
+    <ClInclude Include="..\stdafx.h" />
+    <ClInclude Include="..\TaksiVersion.h" />
+    <ClInclude Include="Avi_Lib\avilib.h" />
+    <ClInclude Include="graphx.h" />
+    <ClInclude Include="H263Enc.h" />
+    <ClInclude Include="HotKeys.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="TaksiDll.h" />
+    <ClInclude Include="Taksi_Global.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

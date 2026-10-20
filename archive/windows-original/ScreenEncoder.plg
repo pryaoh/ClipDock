@@ -1,0 +1,54 @@
+<html>
+<body>
+<pre>
+<h1>Build Log</h1>
+<h3>
+--------------------Configuration: ScreenEncoder - Win32 Debug--------------------
+</h3>
+<h3>Command Lines</h3>
+Creating command line "rc.exe /l 0x412 /fo"Debug/ScreenEncoder.res" /d "_DEBUG" "C:\Program Files\Microsoft Visual Studio\MyProjects\ScreenEncoder\ScreenEncoder.rc"" 
+Creating temporary file "C:\DOCUME~1\ss\LOCALS~1\Temp\RSP12.tmp" with contents
+[
+/nologo /MTd /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /D "_MBCS" /Fp"Debug/ScreenEncoder.pch" /YX /Fo"Debug/" /Fd"Debug/" /FD /GZ /c 
+"C:\Program Files\Microsoft Visual Studio\MyProjects\ScreenEncoder\EncodingThread.cpp"
+"C:\Program Files\Microsoft Visual Studio\MyProjects\ScreenEncoder\H263Dec.cpp"
+"C:\Program Files\Microsoft Visual Studio\MyProjects\ScreenEncoder\ScreenEncoderDlg.cpp"
+]
+Creating command line "cl.exe @C:\DOCUME~1\ss\LOCALS~1\Temp\RSP12.tmp" 
+Creating temporary file "C:\DOCUME~1\ss\LOCALS~1\Temp\RSP13.tmp" with contents
+[
+/nologo /subsystem:windows /incremental:yes /pdb:"Debug/ScreenEncoder.pdb" /debug /machine:I386 /out:"Debug/ScreenEncoder.exe" /pdbtype:sept 
+".\Debug\avilib.obj"
+".\Debug\EncodingThread.obj"
+".\Debug\H263Dec.obj"
+".\Debug\H263Enc.obj"
+".\Debug\ScreenEncoder.obj"
+".\Debug\ScreenEncoderDlg.obj"
+".\Debug\StdAfx.obj"
+".\Debug\ScreenEncoder.res"
+]
+Creating command line "link.exe @C:\DOCUME~1\ss\LOCALS~1\Temp\RSP13.tmp"
+<h3>Output Window</h3>
+Compiling resources...
+Compiling...
+EncodingThread.cpp
+H263Dec.cpp
+c:\program files\microsoft visual studio\myprojects\screenencoder\h263dec.cpp(72) : warning C4018: '<' : signed/unsigned mismatch
+ScreenEncoderDlg.cpp
+c:\program files\microsoft visual studio\myprojects\screenencoder\avi_lib\avilib.h(108) : warning C4005: 'WAVE_FORMAT_PCM' : macro redefinition
+        c:\program files\microsoft visual studio\vc98\include\mmsystem.h(703) : see previous definition of 'WAVE_FORMAT_PCM'
+c:\program files\microsoft visual studio\myprojects\screenencoder\screenencoderdlg.cpp(178) : warning C4101: 'iTemp' : unreferenced local variable
+c:\program files\microsoft visual studio\myprojects\screenencoder\screenencoderdlg.cpp(304) : warning C4552: '!=' : operator has no effect; expected operator with side-effect
+Linking...
+nafxcwd.lib(afxmem.obj) : error LNK2005: "void * __cdecl operator new(unsigned int)" (??2@YAPAXI@Z) already defined in LIBCMTD.lib(new.obj)
+nafxcwd.lib(afxmem.obj) : error LNK2005: "void __cdecl operator delete(void *)" (??3@YAXPAX@Z) already defined in LIBCMTD.lib(dbgdel.obj)
+LINK : fatal error LNK1207: incompatible PDB format in "C:\Program Files\Microsoft Visual Studio\MyProjects\ScreenEncoder\Debug\ScreenEncoder.pdb"; delete and rebuild
+Error executing link.exe.
+
+
+
+<h3>Results</h3>
+ScreenEncoder.exe - 3 error(s), 4 warning(s)
+</pre>
+</body>
+</html>

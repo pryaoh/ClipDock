@@ -1,0 +1,204 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{5b406f28-efec-485a-8a83-aac319a2d959}</UniqueIdentifier>
+      <Extensions>cpp;c;cxx;rc;def;r;odl;idl;hpj;bat</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{56a4261e-ff82-432c-8581-53941fda7972}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{2a63f3c5-8a8c-4eaa-a257-897fbbc30ab3}</UniqueIdentifier>
+      <Extensions>ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe</Extensions>
+    </Filter>
+    <Filter Include="VOIP">
+      <UniqueIdentifier>{30783ed5-a001-40ee-aa49-0bb771718305}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="AlphaDlg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Avi_Lib\avilib.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="H263Enc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MainCtrlPanel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MyComboBox.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MyTabCtrl.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PreviewDlg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RecordDlg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenEncoder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenEncoderDlg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="StdAfx.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Test_dx8.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Test_dx9.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WebControl.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WebView.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="voip\CamDecoder.cpp">
+      <Filter>VOIP</Filter>
+    </ClCompile>
+    <ClCompile Include="voip\H263Dec.cpp">
+      <Filter>VOIP</Filter>
+    </ClCompile>
+    <ClCompile Include="voip\MP3Play.cpp">
+      <Filter>VOIP</Filter>
+    </ClCompile>
+    <ClCompile Include="voip\Object.cpp">
+      <Filter>VOIP</Filter>
+    </ClCompile>
+    <ClCompile Include="voip\Packet.cpp">
+      <Filter>VOIP</Filter>
+    </ClCompile>
+    <ClCompile Include="voip\Sock_Dgram.cpp">
+      <Filter>VOIP</Filter>
+    </ClCompile>
+    <ClCompile Include="voip\String.cpp">
+      <Filter>VOIP</Filter>
+    </ClCompile>
+    <ClCompile Include="voip\ThreadWork.cpp">
+      <Filter>VOIP</Filter>
+    </ClCompile>
+    <ClCompile Include="voip\Waveout.cpp">
+      <Filter>VOIP</Filter>
+    </ClCompile>
+    <ClCompile Include="voip\WinSocket.cpp">
+      <Filter>VOIP</Filter>
+    </ClCompile>
+    <ClCompile Include="voip\WorkProcess.cpp">
+      <Filter>VOIP</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="ScreenEncoder.rc">
+      <Filter>Source Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AlphaDlg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Avi_Lib\avilib.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="H263Enc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MainCtrlPanel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MyComboBox.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MyTabCtrl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PreviewDlg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RecordDlg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ScreenCapture.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ScreenEncoder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ScreenEncoderDlg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="StdAfx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="taksi\dll\Taksi_Global.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WebControl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WebView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\audio.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\CamDecoder.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\Global.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\H263Dec.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\MP3Play.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\Object.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\Packet.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\Sock_Dgram.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\String.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\ThreadWork.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\Waveout.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\WinSocket.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+    <ClInclude Include="voip\WorkProcess.h">
+      <Filter>VOIP</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\ScreenEncoder.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\ScreenEncoder.rc2">
+      <Filter>Resource Files</Filter>
+    </None>
+  </ItemGroup>
+</Project>

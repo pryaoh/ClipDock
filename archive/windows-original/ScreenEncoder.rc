@@ -1,0 +1,354 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "afxres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// 한국어 resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_KOR)
+#ifdef _WIN32
+LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
+#pragma code_page(949)
+#endif //_WIN32
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "#define _AFX_NO_SPLITTER_RESOURCES\r\n"
+    "#define _AFX_NO_OLE_RESOURCES\r\n"
+    "#define _AFX_NO_TRACKER_RESOURCES\r\n"
+    "#define _AFX_NO_PROPERTY_RESOURCES\r\n"
+    "\r\n"
+    "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_KOR)\r\n"
+    "#ifdef _WIN32\r\n"
+    "LANGUAGE 18, 1\r\n"
+    "#pragma code_page(949)\r\n"
+    "#endif //_WIN32\r\n"
+    "#include ""res\\ScreenEncoder.rc2""  // non-Microsoft Visual C++ edited resources\r\n"
+    "#include ""l.kor\\afxres.rc""          // Standard components\r\n"
+    "#endif\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON                    "res\\ScreenEncoder.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_SCREENENCODER_DIALOG DIALOGEX 0, 0, 299, 128
+STYLE DS_SYSMODAL | DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "WoW Encoder for Team Yes"
+FONT 9, "굴림", 0, 0, 0x0
+BEGIN
+    DEFPUSHBUTTON   "종료",IDOK,111,110,35,14
+    PUSHBUTTON      "Record",IDC_RECORD,47,110,32,14
+    COMBOBOX        IDC_SCREENSIZE,32,45,51,53,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
+    GROUPBOX        "설정",IDC_STATIC,1,0,148,108
+    EDITTEXT        IDC_WIDTH,87,46,23,12,ES_AUTOHSCROLL | ES_NUMBER | NOT WS_VISIBLE
+    EDITTEXT        IDC_HEIGHT,121,46,23,12,ES_AUTOHSCROLL | ES_NUMBER | NOT WS_VISIBLE
+    EDITTEXT        IDC_KEYFRAME,64,61,19,12,ES_AUTOHSCROLL | ES_NUMBER
+    EDITTEXT        IDC_FRAMERATE,64,76,19,12,ES_AUTOHSCROLL | ES_NUMBER
+    PUSHBUTTON      "일시정지",IDC_PAUSE,80,110,30,14
+    COMBOBOX        IDC_RECORD_METHOD,87,74,57,54,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
+    EDITTEXT        IDC_CURDIR,32,29,72,12,ES_AUTOHSCROLL
+    EDITTEXT        IDC_WINDOWNAME,32,13,72,12,ES_AUTOHSCROLL
+    PUSHBUTTON      "선택",IDC_SELWIN,114,13,31,14
+    PUSHBUTTON      "클리어",IDC_BUTTON3,241,1,30,14,NOT WS_VISIBLE
+    LTEXT           "X",IDC_CROSS1,113,47,8,8,NOT WS_VISIBLE
+    LTEXT           "Record Method",IDC_STATIC,88,63,50,8
+    LTEXT           "Frame Rate 설정:",IDC_STATIC,4,78,57,10
+    LTEXT           "Key Frame 간격:",IDC_STATIC,4,65,54,10
+    LTEXT           "해상도 :",IDC_STATIC,4,47,25,8
+    LTEXT           "경    로:",IDC_STATIC,4,31,25,8
+    LTEXT           "윈도우 :",IDC_STATIC,4,15,25,8
+    CONTROL         "",IDC_VIEW1,"Static",SS_BLACKRECT,151,3,146,122
+    CONTROL         "preview",IDC_CHECK1,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,108,31,36,10
+    CONTROL         "Wide",IDC_WIDE,"Button",BS_AUTOCHECKBOX | NOT WS_VISIBLE | WS_TABSTOP,267,2,31,10
+    CONTROL         "소리녹음",IDC_SOUND_RECORD,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,88,92,40,10
+    EDITTEXT        IDC_bitrate,44,91,25,14,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "비트레이트:",IDC_STATIC,4,94,38,8
+    CONTROL         "",IDC_SPIN1,"msctls_updown32",UDS_ARROWKEYS,69,91,10,14
+    PUSHBUTTON      "Start",IDC_START,3,110,43,13
+END
+
+IDD_WEB_VIEW DIALOGEX 0, 0, 279, 146
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_GROUP | WS_TABSTOP
+EXSTYLE WS_EX_CLIENTEDGE | WS_EX_APPWINDOW
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    CONTROL         "",IDC_ALPHA_CHANGE,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | NOT WS_VISIBLE | WS_TABSTOP,0,0,84,11
+END
+
+IDD_MAIN_MENU DIALOGEX 0, 0, 186, 55
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    CONTROL         "",IDC_ALPHA,"msctls_trackbar32",TBS_VERT | TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,168,13,15,41
+    CONTROL         "",IDC_MAIN_TAB,"SysTabControl32",0x0,0,0,168,54
+END
+
+IDD_ALPHADLG DIALOGEX 0, 0, 186, 95
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "대화 상자"
+FONT 9, "MS Sans Serif, 굴림", 0, 0, 0x0
+BEGIN
+    DEFPUSHBUTTON   "확인",IDOK,136,0,50,16
+    PUSHBUTTON      "취소",IDCANCEL,136,26,50,16
+END
+
+IDD_RECORD DIALOGEX 0, 0, 165, 54
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_SYSMENU
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    CONTROL         "Record",IDC_RECORD,"Button",BS_AUTOCHECKBOX | BS_PUSHLIKE | WS_TABSTOP,103,1,36,12
+    COMBOBOX        IDC_SCREEN,35,2,59,51,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "해상도",IDC_STATIC,5,4,26,10
+    CONTROL         "미리보기",IDC_CHECK2,"Button",BS_AUTOCHECKBOX | BS_PUSHLIKE | WS_TABSTOP,103,25,36,12
+    CONTROL         "일시정지",IDC_CHECK3,"Button",BS_AUTOCHECKBOX | BS_PUSHLIKE | WS_TABSTOP,103,13,36,12
+    EDITTEXT        IDC_FRAMERATE,49,16,31,12,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "FPS:",IDC_STATIC,5,19,25,9
+    LTEXT           "품질:",IDC_STATIC,5,31,25,8
+    CONTROL         "",IDC_SPIN2,"msctls_updown32",UDS_ARROWKEYS,82,29,12,12
+    CONTROL         "",IDC_SPIN3,"msctls_updown32",UDS_ARROWKEYS,82,16,12,12
+    EDITTEXT        IDC_bitrate2,49,29,31,12,ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "",IDC_ALPHA,"msctls_trackbar32",TBS_VERT | TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,147,1,17,44
+END
+
+IDD_WEB_CONTROL DIALOGEX 0, 0, 166, 53
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_SYSMENU
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    CONTROL         "보이기",IDC_SHOW,"Button",BS_AUTOCHECKBOX | BS_PUSHLIKE | WS_TABSTOP,0,1,50,15
+    CONTROL         "",IDC_ALPHA,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,98,3,64,14
+    LTEXT           "희미하게",IDC_STATIC,62,5,34,8
+    CONTROL         "창 클릭금지",IDC_TRANSPARENT,"Button",BS_AUTOCHECKBOX | BS_PUSHLIKE | WS_TABSTOP,0,18,50,15
+END
+
+IDD_PREVIEW DIALOGEX 0, 0, 174, 118
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
+EXSTYLE WS_EX_TOOLWINDOW
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+END
+
+IDD_DIALOG1 DIALOGEX 0, 0, 186, 95
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Dialog"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    DEFPUSHBUTTON   "확인",IDOK,129,7,50,14
+    PUSHBUTTON      "취소",IDCANCEL,129,24,50,14
+    CONTROL         "",IDC_COMBOBOXEX1,"ComboBoxEx32",CBS_DROPDOWN | CBS_SORT | WS_VSCROLL | WS_TABSTOP,10,9,118,30
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,1
+ PRODUCTVERSION 1,0,0,1
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x4L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "041204b0"
+        BEGIN
+            VALUE "Comments", "D3D9 전용 스크린 인코딩 소프트웨어"
+            VALUE "FileDescription", "ScreenEncoder MFC 응용 프로그램"
+            VALUE "FileVersion", "1, 0, 0, 1"
+            VALUE "InternalName", "ScreenEncoder - for Team Yes"
+            VALUE "LegalCopyright", "Copyright (C) 2005"
+            VALUE "OriginalFilename", "ScreenEncoder.EXE"
+            VALUE "ProductName", "ScreenEncoder 응용 프로그램"
+            VALUE "ProductVersion", "1, 0, 0, 1"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x412, 1200
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog Info
+//
+
+IDD_SCREENENCODER_DIALOG DLGINIT
+BEGIN
+    IDC_SCREENSIZE, 0x403, 10, 0
+0x3631, 0x2030, 0x2058, 0x3231, 0x0030, 
+    IDC_SCREENSIZE, 0x403, 10, 0
+0x3233, 0x2030, 0x2058, 0x3432, 0x0030, 
+    IDC_SCREENSIZE, 0x403, 10, 0
+0x3834, 0x2030, 0x2058, 0x3633, 0x0030, 
+    IDC_SCREENSIZE, 0x403, 10, 0
+0x3436, 0x2030, 0x2058, 0x3834, 0x0030, 
+    IDC_SCREENSIZE, 0x403, 10, 0
+0x3038, 0x2030, 0x2058, 0x3036, 0x0030, 
+    IDC_SCREENSIZE, 0x403, 11, 0
+0x3031, 0x3432, 0x5820, 0x3720, 0x3836, "\000" 
+    IDC_SCREENSIZE, 0x403, 12, 0
+0x3231, 0x3038, 0x5820, 0x3120, 0x3230, 0x0034, 
+    IDC_SCREENSIZE, 0x403, 12, 0
+0xf6c7, 0xe7c0, 0xc720, 0xbbd8, 0xb5f3, 0x00b5, 
+    IDC_SCREENSIZE, 0x403, 12, 0
+0xe7bb, 0xebbf, 0xdac0, 0xc120, 0xc0a4, 0x00c7, 
+    0
+END
+
+IDD_RECORD DLGINIT
+BEGIN
+    IDC_SCREEN, 0x403, 10, 0
+0x3631, 0x2030, 0x2058, 0x3231, 0x0030, 
+    IDC_SCREEN, 0x403, 10, 0
+0x3233, 0x2030, 0x2058, 0x3432, 0x0030, 
+    IDC_SCREEN, 0x403, 10, 0
+0x3834, 0x2030, 0x2058, 0x3633, 0x0030, 
+    IDC_SCREEN, 0x403, 10, 0
+0x3436, 0x2030, 0x2058, 0x3834, 0x0030, 
+    IDC_SCREEN, 0x403, 10, 0
+0x3038, 0x2030, 0x2058, 0x3036, 0x0030, 
+    IDC_SCREEN, 0x403, 11, 0
+0x3031, 0x3432, 0x5820, 0x3720, 0x3836, "\000" 
+    IDC_SCREEN, 0x403, 12, 0
+0x3231, 0x3038, 0x5820, 0x3120, 0x3230, 0x0034, 
+    IDC_SCREEN, 0x403, 12, 0
+0xf6c7, 0xe7c0, 0xc720, 0xbbd8, 0xb5f3, 0x00b5, 
+    IDC_SCREEN, 0x403, 12, 0
+0xe7bb, 0xebbf, 0xdac0, 0xc120, 0xc0a4, 0x00c7, 
+    0
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO 
+BEGIN
+    IDD_SCREENENCODER_DIALOG, DIALOG
+    BEGIN
+        RIGHTMARGIN, 281
+        TOPMARGIN, 1
+        BOTTOMMARGIN, 110
+    END
+
+    IDD_WEB_VIEW, DIALOG
+    BEGIN
+        RIGHTMARGIN, 272
+        BOTTOMMARGIN, 139
+    END
+
+    IDD_MAIN_MENU, DIALOG
+    BEGIN
+        RIGHTMARGIN, 185
+        BOTTOMMARGIN, 52
+    END
+
+    IDD_ALPHADLG, DIALOG
+    BEGIN
+        BOTTOMMARGIN, 88
+    END
+
+    IDD_RECORD, DIALOG
+    BEGIN
+        RIGHTMARGIN, 164
+        BOTTOMMARGIN, 53
+    END
+
+    IDD_WEB_CONTROL, DIALOG
+    BEGIN
+        RIGHTMARGIN, 149
+        BOTTOMMARGIN, 47
+    END
+
+    IDD_DIALOG1, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 179
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 88
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+#endif    // 한국어 resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#define _AFX_NO_SPLITTER_RESOURCES
+#define _AFX_NO_OLE_RESOURCES
+#define _AFX_NO_TRACKER_RESOURCES
+#define _AFX_NO_PROPERTY_RESOURCES
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_KOR)
+#ifdef _WIN32
+LANGUAGE 18, 1
+#pragma code_page(949)
+#endif //_WIN32
+#include "res\ScreenEncoder.rc2"  // non-Microsoft Visual C++ edited resources
+#include "l.kor\afxres.rc"          // Standard components
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

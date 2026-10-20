@@ -1,0 +1,31 @@
+Microsoft Visual Studio Solution File, Format Version 9.00
+# Visual Studio 2005
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ScreenEncoder", "ScreenEncoder.vcproj", "{A1BF3433-AA26-48FB-9BE2-B38A329826B3}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TaksiDll", "taksi\dll\TaksiDll.vcproj", "{A6933EDB-048F-4D59-A0D8-E6DD23F9EAB2}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MouseHook", "MouseHook\MouseHook.vcproj", "{F425E02A-24E1-448F-8A24-39D13008B609}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A1BF3433-AA26-48FB-9BE2-B38A329826B3}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A1BF3433-AA26-48FB-9BE2-B38A329826B3}.Debug|Win32.Build.0 = Debug|Win32
+		{A1BF3433-AA26-48FB-9BE2-B38A329826B3}.Release|Win32.ActiveCfg = Release|Win32
+		{A1BF3433-AA26-48FB-9BE2-B38A329826B3}.Release|Win32.Build.0 = Release|Win32
+		{A6933EDB-048F-4D59-A0D8-E6DD23F9EAB2}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A6933EDB-048F-4D59-A0D8-E6DD23F9EAB2}.Debug|Win32.Build.0 = Debug|Win32
+		{A6933EDB-048F-4D59-A0D8-E6DD23F9EAB2}.Release|Win32.ActiveCfg = Release|Win32
+		{A6933EDB-048F-4D59-A0D8-E6DD23F9EAB2}.Release|Win32.Build.0 = Release|Win32
+		{F425E02A-24E1-448F-8A24-39D13008B609}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F425E02A-24E1-448F-8A24-39D13008B609}.Debug|Win32.Build.0 = Debug|Win32
+		{F425E02A-24E1-448F-8A24-39D13008B609}.Release|Win32.ActiveCfg = Release|Win32
+		{F425E02A-24E1-448F-8A24-39D13008B609}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

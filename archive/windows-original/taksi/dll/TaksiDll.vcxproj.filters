@@ -1,0 +1,204 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Shared">
+      <UniqueIdentifier>{8e301826-7dee-425b-97a0-7bc6b3222b59}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common">
+      <UniqueIdentifier>{2b9d2837-8ecb-4942-9572-a7661a68a066}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="AVI.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="config.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="graphx.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="graphx_dx8.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="graphx_dx9.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="graphx_gdi.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="graphx_ogl.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HotKeys.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TaksiDll.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Avi_Lib\avilib.c">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CAVIFile.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CFileDirDlg.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CHookJump.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CImageGDIP.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CIniObject.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CLogBase.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\Common.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CWaveACM.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CWaveDevice.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CWaveFormat.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CWndToolTip.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="H263Enc.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="graphx_ogl.tbl">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="..\ConfigProps.tbl">
+      <Filter>Shared</Filter>
+    </None>
+    <None Include="..\ProcStatProps.tbl">
+      <Filter>Shared</Filter>
+    </None>
+    <None Include="..\common\CImageGDIPFunc.tbl">
+      <Filter>Common</Filter>
+    </None>
+    <None Include="..\common\CVideoCodecs.tbl">
+      <Filter>Common</Filter>
+    </None>
+    <None Include="..\common\CWaveACMFunc.tbl">
+      <Filter>Common</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="TaksiDll.rc">
+      <Filter>Source Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="graphx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HotKeys.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Taksi_Global.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Config.h">
+      <Filter>Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\stdafx.h">
+      <Filter>Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="TaksiDll.h">
+      <Filter>Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\TaksiVersion.h">
+      <Filter>Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="Avi_Lib\avilib.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CAVIFile.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CDll.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CFileDirDlg.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CHeapBlock.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CHookJump.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CImageGDIP.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CIniObject.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CLogBase.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CNTHandle.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\Common.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CRefPtr.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CThreadLockedLong.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CWaveACM.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CWaveDevice.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CWaveFormat.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CWindow.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CWndGDI.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CWndToolTip.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\glext.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="H263Enc.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\IRefPtr.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

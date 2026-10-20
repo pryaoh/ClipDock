@@ -1,0 +1,79 @@
+# Build and package output
+build/
+build-*/
+cmake-build-*/
+/out/
+/dist/
+
+# CMake and Ninja generated files (keep CMakePresets.json tracked)
+CMakeFiles/
+CMakeCache.txt
+CMakeUserPresets.json
+cmake_install.cmake
+CTestTestfile.cmake
+DartConfiguration.tcl
+Testing/
+install_manifest.txt
+compile_commands.json
+/Makefile
+build.ninja
+rules.ninja
+.ninja_deps
+.ninja_log
+_deps/
+
+# C/C++ compiler, linker and coverage output
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.app/
+*.dSYM/
+*.pch
+*.gch
+*.pdb
+*.idb
+*.ilk
+*.exp
+*.gcda
+*.gcno
+*.gcov
+*.profraw
+*.profdata
+
+# Local IDE settings and caches
+.vs/
+.idea/
+.cache/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+
+# Qt generated files
+.qt/
+.qmake.stash
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+
+# OS metadata and editor temporary files
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+*~
+*.swp
+*.swo
+
+# Preserve the complete archive, including legacy binaries and build output.
+# Keep these exceptions last so the rules above do not exclude archive files.
+!/archive/
+!/archive/**
