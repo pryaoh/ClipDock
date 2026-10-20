@@ -23,7 +23,7 @@ class QVideoSink;
 class RecorderController final : public QObject {
     Q_OBJECT
 public:
-    enum class State { Idle, Starting, Preview, Recording, Paused, Stopping };
+    enum class State { Idle, WaitingForPermission, Starting, Preview, Recording, Paused, Stopping };
     Q_ENUM(State)
     struct Target {
         QPointer<QScreen> screen;
@@ -32,6 +32,7 @@ public:
         QRect region;
         QSize regionScreenSize;
         bool isRegion = false;
+        bool isAvailable() const;
     };
 
     explicit RecorderController(QObject *parent = nullptr);
@@ -53,12 +54,13 @@ signals:
 private:
     friend class RecorderControllerTestPeer; // Synthetic source for permission-free pipeline regression tests.
     void setState(State state);
+    void completePermissionRequest(quint64 generation, bool hadPreview, bool granted);
     void activateCapture();
     void startWriter();
     void handleFrame(const QVideoFrame &frame);
     void handleRegionFrame(const QVideoFrame &frame);
     void handleRecorderState(QMediaRecorder::RecorderState state);
-    void fail(const QString &message);
+    void fail(const QString &message, bool recorderError = false);
     void finish();
     void stopCapture();
 
@@ -86,6 +88,7 @@ private:
     QString m_outputPath;
     QSize m_sourceSize;
     bool m_failed = false;
+    bool m_recorderFailed = false;
     bool m_writerStarted = false;
     quint64 m_generation = 0;
 };

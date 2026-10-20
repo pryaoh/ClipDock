@@ -21,6 +21,7 @@ public:
 protected:
     void closeEvent(QCloseEvent *event) override;
 private:
+    friend class MainWindowTestPeer;
     void refreshTargets();
     void pickWindow();
     void pickRegion();

@@ -348,6 +348,8 @@ void MainWindow::refreshAudio() {
 void MainWindow::begin(bool recording) {
     const int target = m_target->currentIndex();
     if (target < 0 || target >= m_targets.size()) return;
+    // A modal file dialog still processes screen removal and target-list refresh events.
+    const auto selectedTarget = m_targets[target];
     QString outputPath;
     if (recording) {
         const auto name = QStringLiteral("ClipDock_%1.mp4").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss")));
@@ -364,7 +366,11 @@ void MainWindow::begin(bool recording) {
     options.microphone = recording && m_audio->currentIndex() > 0;
     const int audioIndex = m_audio->currentIndex() - 1;
     const auto audio = audioIndex >= 0 && audioIndex < m_audioDevices.size() ? m_audioDevices[audioIndex] : QAudioDevice();
-    m_controller.start(m_targets[target], options, audio,
+    if (!selectedTarget.isAvailable()) {
+        showError(QStringLiteral("선택한 녹화 대상이 사라졌거나 변경되었습니다. 대상을 다시 선택하세요."));
+        return;
+    }
+    m_controller.start(selectedTarget, options, audio,
         static_cast<QMediaFormat::VideoCodec>(m_codec->currentData().toInt()), outputPath);
 }
 

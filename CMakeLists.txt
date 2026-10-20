@@ -98,7 +98,22 @@ if(BUILD_TESTING)
         target_compile_options(region_recording_tests PRIVATE /utf-8)
     endif()
     add_test(NAME region_recording COMMAND region_recording_tests)
-    set_tests_properties(region_recording PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_MEDIA_BACKEND=ffmpeg")
+    add_test(NAME recording_capture_failure COMMAND region_recording_tests --capture-failure)
+    add_test(NAME recording_delayed_permission COMMAND region_recording_tests --delayed-permission)
+    set_tests_properties(region_recording recording_capture_failure recording_delayed_permission
+        PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_MEDIA_BACKEND=ffmpeg")
+
+    qt_add_executable(recorder_lifecycle_tests qt/tests/RecorderLifecycleTests.cpp
+        qt/src/RecorderController.cpp qt/src/RecorderController.h qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp)
+    target_include_directories(recorder_lifecycle_tests PRIVATE qt/src)
+    target_link_libraries(recorder_lifecycle_tests PRIVATE Qt6::Gui Qt6::Multimedia)
+    if(APPLE)
+        target_link_libraries(recorder_lifecycle_tests PRIVATE "-framework CoreGraphics")
+    elseif(MSVC)
+        target_compile_options(recorder_lifecycle_tests PRIVATE /utf-8)
+    endif()
+    add_test(NAME recorder_lifecycle COMMAND recorder_lifecycle_tests)
+    set_tests_properties(recorder_lifecycle PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     qt_add_executable(window_picker_tests qt/tests/WindowPickerTests.cpp
         qt/src/WindowPicker.cpp qt/src/WindowPicker.h qt/src/NativeWindowPicker.cpp)
@@ -117,6 +132,26 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME window_picker COMMAND window_picker_tests)
     set_tests_properties(window_picker PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    qt_add_executable(main_window_tests qt/tests/MainWindowTests.cpp
+        qt/src/MainWindow.cpp qt/src/MainWindow.h qt/src/RecorderController.cpp qt/src/RecorderController.h
+        qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp qt/src/RegionPicker.cpp qt/src/RegionPicker.h
+        qt/src/WindowPicker.cpp qt/src/WindowPicker.h qt/src/NativeWindowPicker.cpp)
+    target_include_directories(main_window_tests PRIVATE qt/src)
+    target_link_libraries(main_window_tests PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets)
+    if(APPLE OR WIN32)
+        target_link_libraries(main_window_tests PRIVATE Qt6::MultimediaPrivate)
+    endif()
+    if(APPLE)
+        target_link_libraries(main_window_tests PRIVATE "-framework CoreGraphics")
+    elseif(WIN32)
+        target_link_libraries(main_window_tests PRIVATE user32 dwmapi)
+    endif()
+    if(MSVC)
+        target_compile_options(main_window_tests PRIVATE /utf-8)
+    endif()
+    add_test(NAME main_window COMMAND main_window_tests)
+    set_tests_properties(main_window PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     qt_add_executable(media_smoke qt/tests/MediaSmoke.cpp qt/src/MediaFormat.cpp)
     target_include_directories(media_smoke PRIVATE qt/src)

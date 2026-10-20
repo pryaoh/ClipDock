@@ -5,6 +5,10 @@ cmake-build-*/
 /out/
 /dist/
 
+# Local Qt SDK and installer output
+/.tools/
+/aqtinstall.log
+
 # CMake and Ninja generated files (keep CMakePresets.json tracked)
 CMakeFiles/
 CMakeCache.txt

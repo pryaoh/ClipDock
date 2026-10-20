@@ -21,11 +21,25 @@ public:
     static void frame(RecorderController &controller, const QImage &image) {
         controller.handleRegionFrame(QVideoFrame(image));
     }
+    static void captureFailure(RecorderController &controller) {
+        controller.fail(QStringLiteral("injected capture interruption"));
+    }
+    static quint64 waitForPermission(RecorderController &controller, const QString &output) {
+        controller.m_outputPath = output;
+        controller.m_codec = QMediaFormat::VideoCodec::MPEG4;
+        controller.setState(RecorderController::State::WaitingForPermission);
+        return ++controller.m_generation;
+    }
+    static void grantPermission(RecorderController &controller, quint64 generation) {
+        controller.completePermissionRequest(generation, true, true);
+    }
 };
 
 int main(int argc, char **argv) {
     qputenv("QT_MEDIA_BACKEND", QByteArrayLiteral("ffmpeg"));
     QGuiApplication app(argc, argv);
+    const bool captureFailure = app.arguments().contains(QStringLiteral("--capture-failure"));
+    const bool delayedPermission = app.arguments().contains(QStringLiteral("--delayed-permission"));
     QTemporaryDir directory;
     if (!directory.isValid()) return 1;
     RecorderController controller;
@@ -45,7 +59,11 @@ int main(int argc, char **argv) {
         std::cerr << "FAIL: " << message.toStdString() << '\n';
         app.exit(1);
     };
-    QObject::connect(&controller, &RecorderController::errorOccurred, &app, fail);
+    int captureErrors = 0;
+    QObject::connect(&controller, &RecorderController::errorOccurred, &app, [&](const QString &message) {
+        if (captureFailure && message == QStringLiteral("injected capture interruption")) ++captureErrors;
+        else fail(message);
+    });
     int previewFrames = 0;
     QObject::connect(&preview, &QVideoSink::videoFrameChanged, &app, [&](const QVideoFrame &frame) {
         if (!frame.isValid()) return;
@@ -84,6 +102,7 @@ int main(int argc, char **argv) {
     });
     QObject::connect(&player, &QMediaPlayer::mediaStatusChanged, &app, [&](auto status) {
         if (status != QMediaPlayer::EndOfMedia) return;
+        if (captureFailure && captureErrors != 1) { fail(QStringLiteral("capture failure was not exercised")); return; }
         // 2s recording + 1s paused. Pause must not lengthen the saved movie.
         if (decoded < 20 || previewFrames < 20 || player.duration() < 1500 || player.duration() > 2500) {
             fail(QStringLiteral("frames=%1, preview=%2, duration=%3").arg(decoded).arg(previewFrames).arg(player.duration()));
@@ -99,14 +118,27 @@ int main(int argc, char **argv) {
         scheduled = true;
         QTimer::singleShot(1000, &controller, &RecorderController::togglePause);
         QTimer::singleShot(2000, &controller, &RecorderController::togglePause);
-        QTimer::singleShot(3000, &controller, &RecorderController::stop);
+        QTimer::singleShot(3000, &controller, [&] {
+            if (captureFailure) RecorderControllerTestPeer::captureFailure(controller);
+            else controller.stop();
+        });
     });
     QTimer::singleShot(0, &app, [&] {
         RecorderControllerTestPeer::preview(controller, target);
         RecorderControllerTestPeer::frame(controller, desktop);
         if (controller.state() != RecorderController::State::Preview) { fail(QStringLiteral("preview did not start")); return; }
         RecordingOptions options;
-        controller.start(target, options, {}, QMediaFormat::VideoCodec::MPEG4, directory.filePath(QStringLiteral("region.mp4")));
+        const auto output = directory.filePath(QStringLiteral("region.mp4"));
+        if (delayedPermission) {
+            const auto generation = RecorderControllerTestPeer::waitForPermission(controller, output);
+            QTimer::singleShot(500, &controller, [&, generation] {
+                if (controller.state() != RecorderController::State::WaitingForPermission || previewFrames < 3) {
+                    fail(QStringLiteral("preview must continue without recording until permission is granted"));
+                    return;
+                }
+                RecorderControllerTestPeer::grantPermission(controller, generation);
+            });
+        } else controller.start(target, options, {}, QMediaFormat::VideoCodec::MPEG4, output);
         producer.start();
     });
     QTimer::singleShot(20000, &app, [&] { fail(QStringLiteral("region pipeline timed out")); });

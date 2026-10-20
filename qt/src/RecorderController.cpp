@@ -5,10 +5,18 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QPermission>
 #include <QScreen>
 #include <QUrl>
 #include <QVideoSink>
+
+bool RecorderController::Target::isAvailable() const {
+    if (isWindow) return !isRegion && window.isValid();
+    if (!screen || !QGuiApplication::screens().contains(screen.data())) return false;
+    return !isRegion || (screen->size() == regionScreenSize
+        && !regionPixelRect(region, regionScreenSize, regionScreenSize).isEmpty());
+}
 
 RecorderController::RecorderController(QObject *parent) : QObject(parent) {
     m_session.setRecorder(&m_recorder);
@@ -22,7 +30,7 @@ RecorderController::RecorderController(QObject *parent) : QObject(parent) {
     connect(&m_screen, &QScreenCapture::errorOccurred, this, [this](auto, const QString &text) { fail(text); });
     connect(&m_window, &QWindowCapture::errorOccurred, this, [this](auto, const QString &text) { fail(text); });
     connect(&m_recorder, &QMediaRecorder::errorOccurred, this, [this](auto, const QString &text) {
-        fail(text + QStringLiteral("\nH.264 인코더를 사용할 수 없다면 MPEG-4 코덱을 선택해 보세요."));
+        fail(text + QStringLiteral("\nH.264 인코더를 사용할 수 없다면 MPEG-4 코덱을 선택해 보세요."), true);
     });
     connect(&m_recorder, &QMediaRecorder::recorderStateChanged, this, &RecorderController::handleRecorderState);
     connect(&m_recorder, &QMediaRecorder::durationChanged, this, &RecorderController::durationChanged);
@@ -59,10 +67,8 @@ void RecorderController::start(const Target &target, const RecordingOptions &opt
                                const QAudioDevice &audio, QMediaFormat::VideoCodec codec,
                                const QString &outputPath) {
     if (m_state != State::Idle && m_state != State::Preview) return;
-    if (target.isRegion && (target.isWindow || !target.screen
-        || target.screen->size() != target.regionScreenSize
-        || regionPixelRect(target.region, target.regionScreenSize, target.regionScreenSize).isEmpty())) {
-        emit errorOccurred(QStringLiteral("녹화 영역을 다시 지정하세요. 디스플레이 크기가 변경되었을 수 있습니다."));
+    if (!target.isAvailable()) {
+        emit errorOccurred(QStringLiteral("녹화 대상을 다시 선택하세요. 창이 닫혔거나 디스플레이 구성이 변경되었을 수 있습니다."));
         return;
     }
     if (const auto error = options.validate()) {
@@ -82,6 +88,7 @@ void RecorderController::start(const Target &target, const RecordingOptions &opt
     m_codec = codec;
     m_outputPath = outputPath;
     m_failed = false;
+    m_recorderFailed = false;
     m_writerStarted = false;
     const bool hadPreview = m_state == State::Preview;
     if (!hadPreview) {
@@ -89,29 +96,42 @@ void RecorderController::start(const Target &target, const RecordingOptions &opt
         m_sourceSize = {};
     }
     const auto generation = ++m_generation;
-    setState(State::Starting);
+    // Preview frames keep arriving while the OS permission prompt is open.
+    // Only Starting may turn those frames into a recording.
+    setState(State::WaitingForPermission);
     emit durationChanged(0);
-    auto proceed = [this, hadPreview] {
-        if (hadPreview) startWriter();
-        else activateCapture();
-    };
+    if (generation != m_generation || m_state != State::WaitingForPermission) return;
     if (!outputPath.isEmpty() && options.microphone) {
         const QMicrophonePermission permission;
         const auto status = qApp->checkPermission(permission);
         if (status == Qt::PermissionStatus::Undetermined) {
-            qApp->requestPermission(permission, this, [this, generation, proceed](const QPermission &result) {
-                if (generation != m_generation || m_state != State::Starting) return;
-                if (result.status() == Qt::PermissionStatus::Granted) proceed();
-                else fail(QStringLiteral("마이크 권한이 거부되었습니다. OS 개인정보 설정에서 허용하세요."));
+            emit statusChanged(QStringLiteral("마이크 권한 승인 대기 중…"));
+            qApp->requestPermission(permission, this, [this, generation, hadPreview](const QPermission &result) {
+                completePermissionRequest(generation, hadPreview, result.status() == Qt::PermissionStatus::Granted);
             });
             return;
         }
         if (status != Qt::PermissionStatus::Granted) {
-            fail(QStringLiteral("마이크 권한이 없습니다. OS 개인정보 설정에서 허용하세요."));
+            completePermissionRequest(generation, hadPreview, false);
             return;
         }
     }
-    proceed();
+    completePermissionRequest(generation, hadPreview, true);
+}
+
+void RecorderController::completePermissionRequest(quint64 generation, bool hadPreview, bool granted) {
+    if (generation != m_generation || m_state != State::WaitingForPermission) return;
+    if (!granted) {
+        fail(QStringLiteral("마이크 권한이 거부되었습니다. OS 개인정보 설정에서 허용하세요."));
+        return;
+    }
+    if (!m_target.isAvailable()) {
+        fail(QStringLiteral("녹화 대상이 변경되었거나 사라졌습니다. 대상을 다시 선택하세요."));
+        return;
+    }
+    setState(State::Starting);
+    if (hadPreview) startWriter();
+    else activateCapture();
 }
 
 void RecorderController::activateCapture() {
@@ -257,11 +277,17 @@ void RecorderController::finish() {
     const bool recorded = m_writerStarted;
     m_writerStarted = false;
     stopCapture();
-    if (recorded && m_temporary && !m_failed) {
+    QString completionStatus;
+    if (recorded && m_temporary) {
         const auto temporaryPath = m_temporary->fileName();
-        if (QFileInfo(temporaryPath).size() <= 0 || m_recorder.duration() <= 0) {
+        if (QFileInfo(temporaryPath).size() <= 0) {
             m_failed = true;
             emit errorOccurred(QStringLiteral("녹화 데이터가 없습니다."));
+        } else if (m_recorderFailed || m_recorder.duration() <= 0) {
+            // An encoder failure may leave recoverable data. Never report it as a completed movie.
+            m_temporary->setAutoRemove(false);
+            m_failed = true;
+            emit errorOccurred(QStringLiteral("녹화 파일이 완성되지 않았을 수 있습니다. 복구용 임시 파일 보관 위치:\n%1").arg(temporaryPath));
         } else if (!QFile::rename(temporaryPath, m_outputPath)) {
             // Preserve a completed movie if the final destination changed or already exists.
             m_temporary->setAutoRemove(false);
@@ -269,18 +295,22 @@ void RecorderController::finish() {
             emit errorOccurred(QStringLiteral("완성된 파일을 이동하지 못했습니다. 임시 파일 보관 위치:\n%1").arg(temporaryPath));
         } else {
             emit saved(m_outputPath);
-            emit statusChanged(QStringLiteral("저장 완료 · %1").arg(QFileInfo(m_outputPath).fileName()));
+            completionStatus = (m_failed ? QStringLiteral("캡처 중단 · 중단 전 녹화 저장 완료 · %1")
+                                         : QStringLiteral("저장 완료 · %1")).arg(QFileInfo(m_outputPath).fileName());
         }
     }
-    if (m_failed) emit statusChanged(QStringLiteral("작업 실패 · 오류 내용을 확인하세요."));
+    if (!completionStatus.isEmpty()) emit statusChanged(completionStatus);
+    else if (m_failed) emit statusChanged(QStringLiteral("작업 실패 · 오류 내용을 확인하세요."));
     else if (!recorded) emit statusChanged(QStringLiteral("미리보기 종료"));
     m_temporary.reset();
     m_outputPath.clear();
     setState(State::Idle);
 }
 
-void RecorderController::fail(const QString &message) {
-    if (m_state == State::Idle || m_failed) return;
+void RecorderController::fail(const QString &message, bool recorderError) {
+    if (m_state == State::Idle) return;
+    m_recorderFailed = m_recorderFailed || recorderError;
+    if (m_failed) return;
     m_failed = true;
     emit errorOccurred(message);
     if (m_state != State::Stopping) stop();
