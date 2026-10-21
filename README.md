@@ -73,12 +73,41 @@ open dist/qt/ClipDock.app
 
 ## Windows
 
-Visual Studio 2022 C++ 빌드 도구, CMake, Qt 6.8 이상 MSVC kit 및 Multimedia 모듈을 설치합니다.
+Windows 10/11 64비트에서 사용할 수 있습니다. Visual Studio 2022 이상 또는 Build Tools에서
+**C++를 사용한 데스크톱 개발**과 **Windows용 C++ CMake 도구**를 설치합니다.
+Visual Studio 2026을 사용한다면 개별 구성 요소에서 **MSVC v143 - VS 2022 C++ x64/x86 빌드 도구**도
+선택합니다. 빌드 스크립트는 Qt kit에 맞는 v143 도구 집합을 자동 선택합니다.
+Qt가 없다면 Python 3.9 이상도 필요합니다.
+
+`run-windows.cmd`를 더블 클릭하면 빌드 도구를 찾고, 필요한 경우 공식 Qt 6.8.3 MSVC x64
+SDK와 Multimedia/Shader Tools를 프로젝트의 `.tools/qt/`에 설치한 뒤 빌드·패키징·실행합니다.
+최초 Qt 설치에는 인터넷 연결이 필요합니다. 기존 Qt와 시스템 PATH는 변경하지 않습니다.
+
+PowerShell에서 빌드·검사·패키징하려면:
+
+```powershell
+./scripts/build-qt.ps1 -Test -Package
+./dist/qt/bin/ClipDock.exe
+```
+
+이미 Qt를 설치했다면 해당 MSVC x64 kit 경로를 지정할 수 있습니다. 화면 캡처에 필요한
+FFmpeg 미디어 플러그인이 포함되어 있어야 하며, MinGW kit와는 혼용하지 않습니다.
 
 ```powershell
 ./scripts/build-qt.ps1 -QtRoot C:/Qt/6.8.3/msvc2022_64 -Test -Package
 ./dist/qt/bin/ClipDock.exe
 ```
+
+SDK는 `-QtRoot`/`QT_ROOT` → 프로젝트 전용 SDK → `QTDIR` → `C:/Qt/*/msvc2022_64`
+순서로 찾습니다. Qt 또는 컴파일러 경로가 바뀌면 CMake 캐시를 새로 구성합니다.
+SDK만 설치하려면 `./scripts/setup-windows-qt.ps1`을 실행합니다.
+
+Release 실행에 필요한 Qt·FFmpeg·Visual C++ 런타임 DLL과 플러그인은 `dist/qt/`에 함께 배포합니다.
+다른 PC로 옮길 때는 **이 폴더 전체**를 복사하고 `bin/ClipDock.exe`를 실행하세요.
+GitHub Actions의 Windows 빌드도 같은 스크립트로 검사·패키징하며,
+완료된 실행의 `ClipDock-Windows-x64` 아티팩트에서 받을 수 있습니다.
+마이크가 동작하지 않으면 Windows 설정 → 개인정보 및 보안 → 마이크에서
+데스크톱 앱의 마이크 접근을 허용합니다. 실제 화면·창 캡처에는 로컬 대화형 데스크톱이 필요합니다.
 
 ## Linux
 
