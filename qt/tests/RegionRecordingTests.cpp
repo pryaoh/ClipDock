@@ -1,4 +1,5 @@
 #include "RecorderController.h"
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QMediaPlayer>
 #include <QPainter>
@@ -102,6 +103,10 @@ int main(int argc, char **argv) {
     });
     QObject::connect(&player, &QMediaPlayer::mediaStatusChanged, &app, [&](auto status) {
         if (status != QMediaPlayer::EndOfMedia) return;
+        if (!QFileInfo::exists(directory.filePath(QStringLiteral("region.mp4")))) {
+            fail(QStringLiteral("completed recording was removed during temporary-file cleanup"));
+            return;
+        }
         if (captureFailure && captureErrors != 1) { fail(QStringLiteral("capture failure was not exercised")); return; }
         // 2s recording + 1s paused. Pause must not lengthen the saved movie.
         if (decoded < 20 || previewFrames < 20 || player.duration() < 1500 || player.duration() > 2500) {

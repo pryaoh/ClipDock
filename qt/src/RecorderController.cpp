@@ -288,12 +288,16 @@ void RecorderController::finish() {
             m_temporary->setAutoRemove(false);
             m_failed = true;
             emit errorOccurred(QStringLiteral("녹화 파일이 완성되지 않았을 수 있습니다. 복구용 임시 파일 보관 위치:\n%1").arg(temporaryPath));
-        } else if (!QFile::rename(temporaryPath, m_outputPath)) {
+        } else if (!m_temporary->rename(m_outputPath)) {
             // Preserve a completed movie if the final destination changed or already exists.
             m_temporary->setAutoRemove(false);
             m_failed = true;
             emit errorOccurred(QStringLiteral("완성된 파일을 이동하지 못했습니다. 임시 파일 보관 위치:\n%1").arg(temporaryPath));
         } else {
+            // QTemporaryFile retains a native handle even after close(). Its own
+            // rename releases that handle on Windows; keep the completed movie
+            // when the temporary-file owner is destroyed below.
+            m_temporary->setAutoRemove(false);
             emit saved(m_outputPath);
             completionStatus = (m_failed ? QStringLiteral("캡처 중단 · 중단 전 녹화 저장 완료 · %1")
                                          : QStringLiteral("저장 완료 · %1")).arg(QFileInfo(m_outputPath).fileName());
