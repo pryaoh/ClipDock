@@ -59,6 +59,14 @@ int main(int argc, char **argv) {
     check(directory.isValid(), "temporary directory");
     auto *screen = app.primaryScreen();
     check(screen, "offscreen display");
+    RecorderController::Target portalTarget;
+    portalTarget.isPortal = true;
+    check(portalTarget.isAvailable(), "portal target must not require a preselected QScreen");
+    portalTarget.isRegion = true;
+    check(!portalTarget.isAvailable(), "portal cannot crop using an unrelated monitor's coordinates");
+    portalTarget.isRegion = false;
+    portalTarget.isWindow = true;
+    check(!portalTarget.isAvailable(), "portal cannot use the native window capture path");
     QImage image(screen->size(), QImage::Format_ARGB32);
     image.fill(Qt::green);
 

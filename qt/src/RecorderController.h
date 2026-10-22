@@ -32,6 +32,8 @@ public:
         QRect region;
         QSize regionScreenSize;
         bool isRegion = false;
+        // Wayland selects the source in the OS portal after capture starts.
+        bool isPortal = false;
         bool isAvailable() const;
     };
 

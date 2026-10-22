@@ -12,6 +12,7 @@
 #include <QVideoSink>
 
 bool RecorderController::Target::isAvailable() const {
+    if (isPortal) return !isWindow && !isRegion;
     if (isWindow) return !isRegion && window.isValid();
     if (!screen || !QGuiApplication::screens().contains(screen.data())) return false;
     return !isRegion || (screen->size() == regionScreenSize
@@ -138,7 +139,9 @@ void RecorderController::activateCapture() {
     QString permissionMessage;
     if (!requestScreenPermission(permissionMessage)) { fail(permissionMessage); return; }
     emit statusChanged(QStringLiteral("캡처 시작 중… OS 화면 선택 창이 나타나면 대상을 선택하세요."));
-    m_startTimeout.start();
+    // Portal selection is user-paced and may remain open for more than 20s.
+    // Encoding still has a timeout once the first frame reaches startWriter().
+    if (!m_target.isPortal) m_startTimeout.start();
     m_regionThrottle.invalidate();
     m_regionSession.setScreenCapture(nullptr);
     m_session.setScreenCapture(nullptr);
@@ -152,7 +155,7 @@ void RecorderController::activateCapture() {
         m_window.setWindow(m_target.window);
         m_window.start();
     } else {
-        if (!m_target.screen) { fail(QStringLiteral("선택한 디스플레이가 연결되어 있지 않습니다.")); return; }
+        if (!m_target.isPortal && !m_target.screen) { fail(QStringLiteral("선택한 디스플레이가 연결되어 있지 않습니다.")); return; }
         m_session.setWindowCapture(nullptr);
         if (m_target.isRegion) {
             m_regionSession.setScreenCapture(&m_screen);
@@ -161,7 +164,7 @@ void RecorderController::activateCapture() {
                 fail(QStringLiteral("디스플레이 구성이 변경되었습니다. 영역을 다시 지정하세요."));
             });
         } else m_session.setScreenCapture(&m_screen);
-        m_screen.setScreen(m_target.screen);
+        if (!m_target.isPortal) m_screen.setScreen(m_target.screen);
         m_screen.start();
     }
 }

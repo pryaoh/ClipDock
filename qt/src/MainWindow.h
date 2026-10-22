@@ -58,4 +58,5 @@ private:
     QVideoWidget *m_video = nullptr;
     QString m_lastFile;
     bool m_closing = false;
+    bool m_portalCapture = false;
 };

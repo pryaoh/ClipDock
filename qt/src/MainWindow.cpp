@@ -48,6 +48,7 @@ MainWindow::MainWindow() {
     m_sourceType = new QComboBox;
     m_sourceType->addItem(QStringLiteral("화면"));
     const bool wayland = QGuiApplication::platformName().startsWith(QStringLiteral("wayland"));
+    m_portalCapture = wayland;
     if (!wayland) m_sourceType->addItem(QStringLiteral("창"));
     if (!wayland) m_sourceType->addItem(QStringLiteral("영역"));
     m_target = new QComboBox;
@@ -95,7 +96,7 @@ MainWindow::MainWindow() {
     m_audio = new QComboBox;
     form->addRow(QStringLiteral("오디오 입력"), m_audio);
     auto *hint = new QLabel(wayland
-        ? QStringLiteral("Wayland에서는 시작 시 OS가 화면/창 선택 창을 표시합니다.")
+        ? QStringLiteral("Wayland에서는 시작 시 시스템 공유 창에서 대상을 선택합니다. 화면 일부를 자르려면 X11 세션을 사용하세요.")
         : QStringLiteral("원본 화면 비율을 유지합니다. 시스템 소리는 별도 루프백 입력 장치가 필요합니다."));
     hint->setWordWrap(true);
     hint->setStyleSheet(QStringLiteral("color: #707070;"));
@@ -156,6 +157,8 @@ MainWindow::MainWindow() {
                            "단축키 (앱에 포커스가 있을 때):\n"
                            "Ctrl/⌘+Shift+R 녹화 · Ctrl/⌘+Shift+P 일시정지 · Ctrl/⌘+Shift+S 중지\n\n"
                            "macOS: 화면 기록 권한을 허용한 뒤 재실행하세요.\n"
+                           "Linux X11: 화면·창 목록 또는 영역 지정을 사용하세요.\n"
+                           "Linux Wayland: 시작 시 시스템 공유 창에서 대상을 선택하고 공유를 허용하세요.\n"
                            "소리는 선택한 입력 장치에서 녹음합니다. 시스템 소리 직접 캡처는 포함하지 않습니다.\n"
                            "창 크기를 녹화 도중 변경하면 처음 정한 출력 해상도로 저장됩니다."));
     });
@@ -214,7 +217,13 @@ void MainWindow::refreshTargets() {
     m_regionLabel->setVisible(regionMode);
     m_target->clear();
     m_targets.clear();
-    if (m_sourceType->currentIndex() != 1) {
+    m_target->setEnabled(!m_portalCapture);
+    if (m_portalCapture) {
+        RecorderController::Target target;
+        target.isPortal = true;
+        m_targets.append(target);
+        m_target->addItem(QStringLiteral("시작 시 시스템 공유 창에서 선택"));
+    } else if (m_sourceType->currentIndex() != 1) {
         for (auto *screen : QGuiApplication::screens()) {
             RecorderController::Target target;
             target.screen = screen;

@@ -19,6 +19,15 @@ public:
         window.m_target->clear();
     }
     static RecorderController &controller(MainWindow &window) { return window.m_controller; }
+    static void checkPortalTargets(MainWindow &window) {
+        window.m_portalCapture = true;
+        window.refreshTargets();
+        check(window.m_targets.size() == 1 && window.m_targets.front().isPortal,
+              "Wayland exposes a portal target rather than a misleading monitor list");
+        check(!window.m_target->isEnabled(), "Wayland monitor selection is delegated to the portal");
+        check(window.m_targets.front().isAvailable() && !window.m_targets.front().screen,
+              "portal is selectable without binding it to a QScreen");
+    }
 };
 
 class RecorderControllerTestPeer {
@@ -62,5 +71,6 @@ int main(int argc, char **argv) {
     MainWindowTestPeer::begin(window);
     check(dialogVisited && started, "target snapshot survives target list refresh");
     check(controller.state() == RecorderController::State::Idle, "cancelled startup is idle");
+    MainWindowTestPeer::checkPortalTargets(window);
     std::cout << "PASS: save dialog target-list refresh retains selection without stale index access\n";
 }
