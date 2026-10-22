@@ -5,23 +5,48 @@ on:
   pull_request:
     paths: ['qt/**', 'CMakeLists.txt', 'scripts/**', 'run-macos.command', 'run-windows.cmd', 'run-linux.sh', '.gitattributes', '.github/workflows/qt-build.yml']
   workflow_dispatch:
+    inputs:
+      build_release:
+        description: 'Create release binary archives for all platforms (no installers)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: qt-build-${{ github.workflow }}-${{ github.ref }}
+  group: qt-build-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ inputs.build_release || false }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Qt 6.8.3 / ${{ matrix.os }}
+    name: ${{ matrix.artifact }} / Qt 6.8.3
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, windows-2022, ubuntu-24.04]
+        include:
+          - os: windows-2022
+            qt_arch: win64_msvc2022_64
+            artifact: ClipDock-Windows-x64
+            archive: zip
+          - os: macos-15
+            qt_arch: clang_64
+            artifact: ClipDock-macOS-arm64
+            archive: zip
+          - os: macos-15-intel
+            qt_arch: clang_64
+            artifact: ClipDock-macOS-x64
+            archive: zip
+          - os: ubuntu-24.04
+            qt_arch: linux_gcc_64
+            artifact: ClipDock-Linux-x64
+            archive: tar.gz
     runs-on: ${{ matrix.os }}
+    env:
+      CONFIGURATION: Release
+      ARTIFACT_NAME: ${{ matrix.artifact }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,40 +64,53 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.3'
+          arch: ${{ matrix.qt_arch }}
           modules: 'qtmultimedia qtshadertools'
           cache: true
-      - name: Configure
+      - name: Build and test macOS app
         if: runner.os == 'macOS'
-        run: cmake -S . -B build/qt -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
-      - name: Build
-        if: runner.os == 'macOS'
-        run: cmake --build build/qt --config Release --parallel
-      - name: Test
-        if: runner.os == 'macOS'
-        run: ctest --test-dir build/qt -C Release --output-on-failure
-      - name: Build, test and package Windows app
+        shell: bash
+        run: |
+          export QT_ROOT="$QT_ROOT_DIR"
+          bash scripts/test-qt.sh -DCMAKE_OSX_ARCHITECTURES="$(uname -m)"
+      - name: Build and test Windows app
         if: runner.os == 'Windows'
         shell: powershell
-        run: ./scripts/build-qt.ps1 -QtRoot $env:QT_ROOT_DIR -Test -Package
-      - name: Upload Windows app
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ClipDock-Windows-x64
-          path: dist/qt/
-          if-no-files-found: error
-      - name: Build, test and package Linux app
+        run: ./scripts/build-qt.ps1 -QtRoot $env:QT_ROOT_DIR -Configuration Release -Test
+      - name: Build and test Linux app
         if: runner.os == 'Linux'
+        shell: bash
         run: |
           export QT_ROOT="$QT_ROOT_DIR"
           bash scripts/test-qt.sh -G Ninja
+      - name: Package macOS release binaries
+        if: github.event_name == 'workflow_dispatch' && inputs.build_release && runner.os == 'macOS'
+        shell: bash
+        run: |
+          export QT_ROOT="$QT_ROOT_DIR"
+          bash scripts/package-macos.sh -DCMAKE_OSX_ARCHITECTURES="$(uname -m)"
+          lipo -verify_arch "$(uname -m)" dist/qt/ClipDock.app/Contents/MacOS/ClipDock
+          ditto -c -k --sequesterRsrc --keepParent dist/qt/ClipDock.app "dist/$ARTIFACT_NAME.zip"
+      - name: Package Windows release binaries
+        if: github.event_name == 'workflow_dispatch' && inputs.build_release && runner.os == 'Windows'
+        shell: powershell
+        run: |
+          ./scripts/build-qt.ps1 -QtRoot $env:QT_ROOT_DIR -Configuration Release -Package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Compress-Archive -Path dist/qt/* -DestinationPath "dist/$env:ARTIFACT_NAME.zip"
+      - name: Package and verify Linux release binaries
+        if: github.event_name == 'workflow_dispatch' && inputs.build_release && runner.os == 'Linux'
+        shell: bash
+        run: |
+          export QT_ROOT="$QT_ROOT_DIR"
           bash scripts/package-linux.sh -G Ninja
           bash scripts/test-linux-package.sh
-          tar -czf dist/ClipDock-Linux-x64.tar.gz -C dist/linux .
-      - name: Upload Linux app
-        if: runner.os == 'Linux'
+          tar -czf "dist/$ARTIFACT_NAME.tar.gz" -C dist/linux .
+      - name: Upload release binaries
+        if: github.event_name == 'workflow_dispatch' && inputs.build_release
         uses: actions/upload-artifact@v4
         with:
-          name: ClipDock-Linux-x64
-          path: dist/ClipDock-Linux-x64.tar.gz
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}.${{ matrix.archive }}
+          compression-level: 0
           if-no-files-found: error

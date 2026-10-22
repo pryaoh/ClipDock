@@ -1,6 +1,8 @@
 # ClipDock 문제 해결
 
-[README로 돌아가기](README.md)
+[문서 목록](README.md) · [프로젝트 README](../README.md)
+
+이 문서의 명령과 경로는 저장소 루트를 기준으로 합니다.
 
 ## macOS: 권한 스위치는 켜져 있는데 미리보기가 거부되는 경우
 
