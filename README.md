@@ -111,16 +111,60 @@ GitHub Actions의 Windows 빌드도 같은 스크립트로 검사·패키징하�
 
 ## Linux
 
-Qt 6.8 이상과 Multimedia 모듈, CMake, C++20 컴파일러가 필요합니다.
-배포판의 Qt가 6.8보다 낮으면 Qt Online Installer에서 데스크톱 kit를 설치합니다.
+Ubuntu 24.04 x86_64를 기준으로 설치·빌드·검사를 제공합니다.
+Qt 6.8 이상(FFmpeg Multimedia 플러그인 및 Wayland Client 포함), CMake 3.24 이상과 C++20 컴파일러가 필요합니다.
+Ubuntu 기본 Qt가 요구 버전보다 낮으므로 실행 스크립트는 공식 Qt 6.8.3을 프로젝트 내부에 설치합니다.
+
+Ubuntu 24.04에서 필요한 빌드 도구와 런타임을 먼저 설치합니다.
 
 ```sh
-QT_ROOT="$HOME/Qt/6.8.3/gcc_64" ./scripts/build-qt.sh
-./build/qt/ClipDock
+sudo apt update
+sudo apt install build-essential cmake ninja-build python3-venv \
+  libgl1-mesa-dev libegl1 libopengl0 libglib2.0-0t64 libpulse0 libasound2t64 \
+  libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+  libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-xfixes0 \
+  libx11-xcb1 libwayland-dev libwayland-client0 libwayland-cursor0 libwayland-egl1 \
+  libpipewire-0.3-0
+bash run-linux.sh
 ```
 
-Wayland에서는 PipeWire 및 데스크톱 환경에 맞는 `xdg-desktop-portal` 백엔드도 설치되어 있어야 합니다.
-Linux 배포 시 Qt 외에 FFmpeg 및 시스템 라이브러리 의존성도 확인해야 합니다.
+`run-linux.sh`는 Qt Multimedia·Shader Tools·Wayland 모듈을 `.tools/qt/`에 설치하고
+`build/qt-linux/ClipDock`을 빌드해 실행합니다. 최초 설치에는 인터넷 연결이 필요하며
+설치 도구는 `.tools/qt-installer-linux/`에 격리합니다. 시스템 Qt는 변경하지 않습니다.
+Windows 빌드 폴더와 Linux 빌드 폴더를 분리하여 WSL에서도 CMake 캐시가 섞이지 않게 합니다.
+
+기존 공식 Qt kit를 사용하거나 빌드·검사만 실행하려면:
+
+```sh
+QT_ROOT="$HOME/Qt/6.8.3/gcc_64" bash run-linux.sh
+bash scripts/test-qt.sh -G Ninja
+```
+
+SDK만 설치하려면 `bash scripts/setup-linux-qt.sh`를 사용합니다.
+자동 설치는 x86_64용입니다. 다른 아키텍처/배포판에서는 해당 환경에 맞는 Qt 6.8 이상 SDK를
+`QT_ROOT`로 지정하고 시스템 라이브러리도 배포판 패키지 관리자로 설치하세요.
+
+- **X11:** 화면·창 목록 선택, 영역 드래그 녹화를 사용합니다. 창을 직접 클릭하는 선택기는 macOS/Windows용입니다.
+- **Wayland:** 미리보기 또는 녹화 시작 후 시스템 공유 창에서 대상을 선택합니다.
+  앱의 모니터 목록과 영역 지정은 사용하지 않습니다. 공유 선택 창을 기다리는 동안 자동으로 시간 초과하지 않으며
+  앱의 중지 버튼으로 취소할 수 있습니다. Qt 6.8의 Wayland 화면 캡처는 실험적 기능입니다.
+- Wayland에는 실행 중인 PipeWire와 데스크톱에 맞는 ScreenCast 포털 백엔드가 필요합니다.
+  Ubuntu GNOME은 `pipewire`, `xdg-desktop-portal`, `xdg-desktop-portal-gnome` 패키지를 사용합니다.
+  KDE는 KDE 포털 백엔드를 사용하세요. 설치 후 로그아웃·로그인하여 사용자 서비스를 시작합니다.
+- 마이크는 PulseAudio 또는 PipeWire의 PulseAudio 호환 서비스(`pipewire-pulse`)를 사용합니다.
+  실제 화면 공유는 그래픽 데스크톱 세션에서 실행해야 합니다.
+
+Linux 배포 폴더를 만들려면:
+
+```sh
+bash scripts/package-linux.sh -G Ninja
+./dist/linux/bin/ClipDock
+```
+
+`dist/linux/` 전체를 함께 배포합니다. 이 패키지는 같은 계열·버전의 Linux를 대상으로 하며
+glibc, 그래픽 드라이버, PipeWire/포털 등 운영체제 구성 요소까지 포함하는 범용 AppImage는 아닙니다.
+CI는 Ubuntu 24.04에서 빌드한 `ClipDock-Linux-x64` 아티팩트를 tar.gz로 제공합니다.
+압축을 풀면 실행 권한과 라이브러리 심볼릭 링크가 유지됩니다.
 
 ## 검사
 
@@ -145,6 +189,8 @@ Info.plist 변경 뒤 서명 복구를 실제 `codesign`으로 검사합니다.
 `recording_delayed_permission`은 권한 응답 대기 중 미리보기와 승인 후 녹화를 검사합니다.
 `recorder_lifecycle`은 권한 거부·취소·늦은 응답, 대상 소실, 인코더 오류 시 임시 파일 보존을 검사합니다.
 `main_window`는 저장 대화상자가 열린 동안 대상 목록이 바뀌어도 원래 선택을 유지하는지 검사합니다.
+Linux에서 `xvfb`와 `xauth`를 설치하면 `linux_screen_capture`가 가상 X11 화면의 실제 캡처 프레임도 검사합니다.
+Wayland 포털 승인 및 실제 마이크 입력은 그래픽 데스크톱에서 별도로 확인해야 합니다.
 헤드리스 환경에서도 가능한 소프트웨어 MPEG-4 코덱을 사용하며 H.264 하드웨어 인코더 검증을
 대체하지 않습니다.
 

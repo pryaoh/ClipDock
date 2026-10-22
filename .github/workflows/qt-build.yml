@@ -1,9 +1,9 @@
 name: ClipDock desktop build
 on:
   push:
-    paths: ['qt/**', 'CMakeLists.txt', 'scripts/**', 'run-macos.command', 'run-windows.cmd', '.gitattributes', '.github/workflows/qt-build.yml']
+    paths: ['qt/**', 'CMakeLists.txt', 'scripts/**', 'run-macos.command', 'run-windows.cmd', 'run-linux.sh', '.gitattributes', '.github/workflows/qt-build.yml']
   pull_request:
-    paths: ['qt/**', 'CMakeLists.txt', 'scripts/**', 'run-macos.command', 'run-windows.cmd', '.gitattributes', '.github/workflows/qt-build.yml']
+    paths: ['qt/**', 'CMakeLists.txt', 'scripts/**', 'run-macos.command', 'run-windows.cmd', 'run-linux.sh', '.gitattributes', '.github/workflows/qt-build.yml']
   workflow_dispatch:
 
 permissions:
@@ -31,7 +31,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libopengl0 libgl1 libpulse0 libasound2t64
+          sudo apt-get install -y libegl1 libopengl0 libgl1-mesa-dev libglib2.0-0t64 libpulse0 libasound2t64 \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-render-util0 libxcb-xinerama0 libxcb-xfixes0 libx11-xcb1 \
+            libwayland-dev libwayland-client0 libwayland-cursor0 libwayland-egl1 libpipewire-0.3-0 xvfb xauth patchelf
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -39,13 +42,13 @@ jobs:
           modules: 'qtmultimedia qtshadertools'
           cache: true
       - name: Configure
-        if: runner.os != 'Windows'
+        if: runner.os == 'macOS'
         run: cmake -S . -B build/qt -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
       - name: Build
-        if: runner.os != 'Windows'
+        if: runner.os == 'macOS'
         run: cmake --build build/qt --config Release --parallel
       - name: Test
-        if: runner.os != 'Windows'
+        if: runner.os == 'macOS'
         run: ctest --test-dir build/qt -C Release --output-on-failure
       - name: Build, test and package Windows app
         if: runner.os == 'Windows'
@@ -57,4 +60,19 @@ jobs:
         with:
           name: ClipDock-Windows-x64
           path: dist/qt/
+          if-no-files-found: error
+      - name: Build, test and package Linux app
+        if: runner.os == 'Linux'
+        run: |
+          export QT_ROOT="$QT_ROOT_DIR"
+          bash scripts/test-qt.sh -G Ninja
+          bash scripts/package-linux.sh -G Ninja
+          bash scripts/test-linux-package.sh
+          tar -czf dist/ClipDock-Linux-x64.tar.gz -C dist/linux .
+      - name: Upload Linux app
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClipDock-Linux-x64
+          path: dist/ClipDock-Linux-x64.tar.gz
           if-no-files-found: error
