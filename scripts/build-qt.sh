@@ -2,10 +2,12 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/scripts/qt-sdk.sh"
-BUILD="$ROOT/build/qt"
+DEFAULT_BUILD="$ROOT/build/qt"
+if [[ "$(uname -s)" == Linux ]]; then DEFAULT_BUILD="$ROOT/build/qt-linux"; fi
+BUILD="${BUILD_DIR:-$DEFAULT_BUILD}"
 CONFIG="${CONFIGURATION:-Release}"
 if ! command -v cmake >/dev/null 2>&1; then
-    echo "CMake 3.24 이상이 필요합니다. macOS: brew install cmake ninja" >&2
+    echo "CMake 3.24 이상이 필요합니다. macOS: brew install cmake ninja / Ubuntu 24.04: sudo apt install cmake ninja-build build-essential" >&2
     exit 1
 fi
 ARGS=(-S "$ROOT" -B "$BUILD" -DCMAKE_BUILD_TYPE="$CONFIG" -DBUILD_TESTING=ON)

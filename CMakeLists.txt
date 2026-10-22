@@ -55,6 +55,14 @@ qt_add_executable(ClipDock WIN32 MACOSX_BUNDLE
     qt/src/RegionPicker.cpp qt/src/RegionPicker.h qt/src/RegionCapture.h
 )
 target_link_libraries(ClipDock PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Qt marks Wayland platform plugins as non-default, so deployment otherwise
+    # includes only XCB. The module also supplies shell/decoration integrations.
+    find_package(Qt6 6.8 REQUIRED COMPONENTS WaylandClient)
+    target_link_libraries(ClipDock PRIVATE Qt6::WaylandClient)
+    qt_import_plugins(ClipDock INCLUDE
+        Qt6::QWaylandIntegrationPlugin Qt6::QWaylandEglPlatformIntegrationPlugin)
+endif()
 # Qt 6.8 exposes no public native window ID. Use matching private headers only
 # for the OS window picker bridge, so duplicate titles remain unambiguous.
 if(APPLE OR WIN32)
@@ -167,9 +175,24 @@ if(BUILD_TESTING)
     add_test(NAME media_encode_decode COMMAND media_smoke)
     set_tests_properties(media_encode_decode PROPERTIES TIMEOUT 45
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_MEDIA_BACKEND=ffmpeg")
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_program(CLIPDOCK_XVFB_RUN xvfb-run)
+        if(CLIPDOCK_XVFB_RUN)
+            qt_add_executable(linux_screen_capture_tests qt/tests/LinuxScreenCaptureTests.cpp)
+            target_link_libraries(linux_screen_capture_tests PRIVATE Qt6::Widgets Qt6::Multimedia)
+            add_test(NAME linux_screen_capture COMMAND "${CLIPDOCK_XVFB_RUN}" -a
+                -s "-screen 0 1280x720x24" "$<TARGET_FILE:linux_screen_capture_tests>")
+            set_tests_properties(linux_screen_capture PROPERTIES TIMEOUT 20
+                ENVIRONMENT "QT_QPA_PLATFORM=xcb;QT_MEDIA_BACKEND=ffmpeg")
+        endif()
+    endif()
 endif()
 
 include(GNUInstallDirs)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set_target_properties(ClipDock PROPERTIES INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+endif()
 if(MSVC)
     # windeployqt supplies the redistributable installer, not app-local CRT DLLs.
     # Include the release runtime so the packaged app also starts on a clean PC.

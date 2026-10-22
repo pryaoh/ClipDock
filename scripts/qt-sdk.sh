@@ -24,7 +24,11 @@ qt_sdk_select() {
         printf '%s\n' "$QT_ROOT"
         return
     fi
-    local_sdk="$project_root/.tools/qt/$CLIPDOCK_QT_VERSION/macos"
+    case "$(uname -s)" in
+        Darwin) local_sdk="$project_root/.tools/qt/$CLIPDOCK_QT_VERSION/macos" ;;
+        Linux) local_sdk="$project_root/.tools/qt/$CLIPDOCK_QT_VERSION/gcc_64" ;;
+        *) return 0 ;;
+    esac
     if qt_sdk_has_ffmpeg "$local_sdk"; then
         printf '%s\n' "$local_sdk"
     elif [[ "$(uname -s)" == Darwin ]] && command -v brew >/dev/null 2>&1; then
