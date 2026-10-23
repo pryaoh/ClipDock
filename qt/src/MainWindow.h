@@ -9,6 +9,7 @@ class QSpinBox;
 class QPushButton;
 class QLabel;
 class QVideoWidget;
+class QStackedWidget;
 class QCloseEvent;
 class QWidget;
 class WindowPicker;
@@ -55,6 +56,10 @@ private:
     QPushButton *m_reveal = nullptr;
     QLabel *m_status = nullptr;
     QLabel *m_clock = nullptr;
+    QLabel *m_stateBadge = nullptr;
+    QLabel *m_emptyTitle = nullptr;
+    QLabel *m_emptyHint = nullptr;
+    QStackedWidget *m_previewStack = nullptr;
     QVideoWidget *m_video = nullptr;
     QString m_lastFile;
     bool m_closing = false;

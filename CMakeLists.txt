@@ -46,7 +46,7 @@ endif()
 qt_standard_project_setup()
 qt_add_executable(ClipDock WIN32 MACOSX_BUNDLE
     qt/src/main.cpp
-    qt/src/MainWindow.cpp qt/src/MainWindow.h
+    qt/src/MainWindow.cpp qt/src/MainWindow.h qt/src/UiTheme.h
     qt/src/RecorderController.cpp qt/src/RecorderController.h
     qt/src/RecordingOptions.h qt/src/MediaFormat.cpp qt/src/MediaFormat.h
     qt/src/PlatformPermissions.cpp qt/src/PlatformPermissions.h
@@ -55,6 +55,8 @@ qt_add_executable(ClipDock WIN32 MACOSX_BUNDLE
     qt/src/RegionPicker.cpp qt/src/RegionPicker.h qt/src/RegionCapture.h
 )
 target_link_libraries(ClipDock PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets)
+qt_add_resources(ClipDock ui_icons PREFIX /clipdock BASE qt/resources
+    FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Qt marks Wayland platform plugins as non-default, so deployment otherwise
     # includes only XCB. The module also supplies shell/decoration integrations.
@@ -147,11 +149,13 @@ if(BUILD_TESTING)
     set_tests_properties(window_picker PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     qt_add_executable(main_window_tests qt/tests/MainWindowTests.cpp
-        qt/src/MainWindow.cpp qt/src/MainWindow.h qt/src/RecorderController.cpp qt/src/RecorderController.h
+        qt/src/MainWindow.cpp qt/src/MainWindow.h qt/src/UiTheme.h qt/src/RecorderController.cpp qt/src/RecorderController.h
         qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp qt/src/RegionPicker.cpp qt/src/RegionPicker.h
         qt/src/WindowPicker.cpp qt/src/WindowPicker.h qt/src/NativeWindowPicker.cpp)
     target_include_directories(main_window_tests PRIVATE qt/src)
     target_link_libraries(main_window_tests PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets)
+    qt_add_resources(main_window_tests ui_icons PREFIX /clipdock BASE qt/resources
+        FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm)
     if(APPLE OR WIN32)
         target_link_libraries(main_window_tests PRIVATE Qt6::MultimediaPrivate)
     endif()

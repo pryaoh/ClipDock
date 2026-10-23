@@ -2,6 +2,7 @@
 #include "PlatformPermissions.h"
 #include "WindowPicker.h"
 #include "RegionPicker.h"
+#include "UiTheme.h"
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -10,123 +11,257 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QFormLayout>
-#include <QGroupBox>
+#include <QFontDatabase>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScreen>
+#include <QScrollArea>
 #include <QShortcut>
 #include <QSpinBox>
 #include <QStandardPaths>
+#include <QStackedWidget>
+#include <QStyle>
 #include <QVBoxLayout>
 #include <QVideoWidget>
+#include <utility>
 
 MainWindow::MainWindow() {
-    setWindowTitle(QStringLiteral("ClipDock · Qt 6"));
-    resize(820, 730);
+    setWindowTitle(QStringLiteral("ClipDock"));
+    resize(1120, 780);
+    setMinimumSize(920, 620);
+    UiTheme::applyLightTheme(this);
+    using Icon = UiTheme::Icon;
+
+    auto label = [](const QString &text, const char *name) {
+        auto *item = new QLabel(text);
+        item->setObjectName(QLatin1String(name));
+        return item;
+    };
+    auto separator = [] {
+        auto *line = new QFrame;
+        line->setObjectName(QStringLiteral("separator"));
+        line->setFixedHeight(1);
+        return line;
+    };
+    auto button = [](const QString &text, Icon kind, const char *name = "") {
+        auto *item = new QPushButton(UiTheme::icon(kind), text);
+        item->setObjectName(QLatin1String(name));
+        item->setIconSize(QSize(16, 16));
+        item->setCursor(Qt::PointingHandCursor);
+        return item;
+    };
     auto *central = new QWidget(this);
+    central->setObjectName(QStringLiteral("appSurface"));
     auto *layout = new QVBoxLayout(central);
-    layout->setContentsMargins(24, 24, 24, 20);
-    layout->setSpacing(16);
+    layout->setContentsMargins(24, 18, 24, 18);
+    layout->setSpacing(18);
     auto *header = new QHBoxLayout;
-    auto *title = new QLabel(QStringLiteral("<h2>ClipDock</h2>화면과 소리를 동영상으로 기록하세요."));
-    header->addWidget(title);
-    m_clock = new QLabel(QStringLiteral("00:00:00"));
-    m_clock->setStyleSheet(QStringLiteral("font-size: 24px; font-family: monospace;"));
+    header->setSpacing(14);
+    auto *brand = label({}, "brandIcon");
+    brand->setFixedSize(48, 48);
+    brand->setAlignment(Qt::AlignCenter);
+    brand->setPixmap(UiTheme::icon(Icon::Screen, Qt::white).pixmap(QSize(28, 28), devicePixelRatioF()));
+    header->addWidget(brand);
+    auto *heading = new QVBoxLayout;
+    heading->setSpacing(2);
+    heading->addWidget(label(QStringLiteral("ClipDock"), "appTitle"));
+    heading->addWidget(label(QStringLiteral("화면의 순간을, 간편하게 기록하세요."), "subtitle"));
+    header->addLayout(heading);
     header->addStretch();
-    header->addWidget(m_clock);
+    m_stateBadge = label(QStringLiteral("●  대기 중"), "stateBadge");
+    m_stateBadge->setAccessibleDescription(QStringLiteral("녹화 상태"));
+    header->addWidget(m_stateBadge, 0, Qt::AlignVCenter);
     layout->addLayout(header);
 
-    auto *group = new QGroupBox(QStringLiteral("녹화 설정"));
-    m_settings = group;
-    auto *form = new QFormLayout(group);
-    form->setVerticalSpacing(12);
-    auto *sources = new QHBoxLayout;
+    auto *body = new QHBoxLayout;
+    body->setSpacing(18);
+    auto *previewCard = new QFrame;
+    previewCard->setObjectName(QStringLiteral("previewCard"));
+    auto *previewLayout = new QVBoxLayout(previewCard);
+    previewLayout->setContentsMargins(20, 18, 20, 16);
+    previewLayout->setSpacing(16);
+    auto *previewHeader = new QHBoxLayout;
+    previewHeader->addWidget(label(QStringLiteral("미리보기"), "cardTitle"));
+    previewHeader->addStretch();
+    m_preview = button(QStringLiteral("미리보기 시작"), Icon::Play, "previewButton");
+    m_preview->setIcon(UiTheme::icon(Icon::Play, QColor(QStringLiteral("#2563eb"))));
+    previewHeader->addWidget(m_preview);
+    previewLayout->addLayout(previewHeader);
+
+    m_previewStack = new QStackedWidget;
+    m_previewStack->setObjectName(QStringLiteral("previewStack"));
+    m_previewStack->setMinimumSize(360, 220);
+    auto *empty = new QWidget;
+    empty->setObjectName(QStringLiteral("emptyPreview"));
+    auto *emptyLayout = new QVBoxLayout(empty);
+    emptyLayout->setContentsMargins(20, 24, 20, 24);
+    emptyLayout->setSpacing(14);
+    emptyLayout->addStretch();
+    auto *emptyIcon = label({}, "emptyIcon");
+    emptyIcon->setFixedSize(88, 88);
+    emptyIcon->setAlignment(Qt::AlignCenter);
+    emptyIcon->setPixmap(UiTheme::icon(Icon::Screen, QColor(QStringLiteral("#6086db"))).pixmap(QSize(48, 48), devicePixelRatioF()));
+    emptyLayout->addWidget(emptyIcon, 0, Qt::AlignHCenter);
+    m_emptyTitle = label(QStringLiteral("어떤 화면을 담아볼까요?"), "emptyTitle");
+    m_emptyTitle->setAlignment(Qt::AlignCenter);
+    m_emptyTitle->setWordWrap(true);
+    emptyLayout->addWidget(m_emptyTitle);
+    m_emptyHint = label(QStringLiteral("오른쪽에서 녹화 대상을 선택한 뒤\n미리보기 또는 녹화를 시작하세요."), "emptyHint");
+    m_emptyHint->setAlignment(Qt::AlignCenter);
+    m_emptyHint->setWordWrap(true);
+    emptyLayout->addWidget(m_emptyHint);
+    emptyLayout->addStretch();
+    m_previewStack->addWidget(empty);
+    m_video = new QVideoWidget;
+    m_video->setAspectRatioMode(Qt::KeepAspectRatio);
+    m_previewStack->addWidget(m_video);
+    previewLayout->addWidget(m_previewStack, 1);
+    previewLayout->addWidget(label(QStringLiteral("원본 비율을 유지하여 미리보기와 영상을 저장합니다."), "previewCaption"));
+    m_controller.setVideoSink(m_video->videoSink());
+    body->addWidget(previewCard, 1);
+
+    auto *settingsCard = new QFrame;
+    settingsCard->setObjectName(QStringLiteral("settingsCard"));
+    settingsCard->setFixedWidth(300);
+    auto *settingsLayout = new QVBoxLayout(settingsCard);
+    settingsLayout->setContentsMargins(18, 18, 14, 16);
+    settingsLayout->setSpacing(14);
+    settingsLayout->addWidget(label(QStringLiteral("녹화 설정"), "cardTitle"));
+    auto *scroll = new QScrollArea;
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto *settings = new QWidget;
+    m_settings = settings;
+    auto *form = new QVBoxLayout(settings);
+    form->setContentsMargins(0, 0, 4, 0);
+    form->setSpacing(8);
+    auto addField = [&](const QString &text, QWidget *widget) {
+        auto *field = new QVBoxLayout;
+        field->setSpacing(4);
+        auto *caption = label(text, "fieldLabel");
+        caption->setBuddy(widget);
+        widget->setAccessibleName(text);
+        field->addWidget(caption);
+        field->addWidget(widget);
+        form->addLayout(field);
+    };
     m_sourceType = new QComboBox;
     m_sourceType->addItem(QStringLiteral("화면"));
     const bool wayland = QGuiApplication::platformName().startsWith(QStringLiteral("wayland"));
     m_portalCapture = wayland;
     if (!wayland) m_sourceType->addItem(QStringLiteral("창"));
     if (!wayland) m_sourceType->addItem(QStringLiteral("영역"));
+    addField(QStringLiteral("녹화 대상"), m_sourceType);
     m_target = new QComboBox;
-    m_target->setMinimumContentsLength(20);
+    m_target->setMinimumContentsLength(12);
     m_target->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    auto *refresh = new QPushButton(QStringLiteral("새로고침"));
-    m_pickWindow = new QPushButton(QStringLiteral("클릭으로 선택"));
-    m_pickWindow->setObjectName(QStringLiteral("pickWindowButton"));
+    m_target->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    m_target->setAccessibleName(QStringLiteral("녹화할 화면 또는 창"));
+    form->addWidget(m_target);
+    auto *sourceActions = new QHBoxLayout;
+    sourceActions->setSpacing(6);
+    auto *refresh = button(QStringLiteral("새로고침"), Icon::Refresh);
+    m_pickWindow = button(QStringLiteral("클릭으로 선택"), Icon::Window, "pickWindowButton");
     m_pickWindow->setToolTip(WindowPicker::isSupported()
         ? QStringLiteral("화면에 보이는 창을 클릭하여 녹화 대상으로 선택합니다. Esc 또는 오른쪽 클릭으로 취소합니다.")
         : QStringLiteral("이 환경에서는 목록 또는 운영체제의 화면 공유 선택 창을 사용하세요."));
-    sources->addWidget(m_sourceType);
-    sources->addWidget(m_target, 1);
-    sources->addWidget(m_pickWindow);
-    m_pickRegion = new QPushButton(QStringLiteral("영역 지정"));
-    m_pickRegion->setObjectName(QStringLiteral("pickRegionButton"));
+    m_pickRegion = button(QStringLiteral("영역 지정"), Icon::Region, "pickRegionButton");
     m_pickRegion->setToolTip(QStringLiteral("선택한 모니터에서 녹화할 사각형을 드래그하세요. Esc 또는 오른쪽 클릭으로 취소합니다."));
-    sources->addWidget(m_pickRegion);
-    sources->addWidget(refresh);
-    form->addRow(QStringLiteral("녹화 대상"), sources);
-    m_regionLabel = new QLabel;
+    sourceActions->addWidget(m_pickWindow, 1);
+    sourceActions->addWidget(m_pickRegion, 1);
+    sourceActions->addWidget(refresh, 1);
+    form->addLayout(sourceActions);
+    m_regionLabel = label({}, "regionHint");
     m_regionLabel->setWordWrap(true);
-    form->addRow(m_regionLabel);
-    auto *quality = new QHBoxLayout;
+    form->addWidget(m_regionLabel);
+    form->addWidget(separator());
     m_resolution = new QComboBox;
     for (int edge : {1280, 1920, 2560, 4096})
         m_resolution->addItem(QStringLiteral("긴 변 최대 %1 px").arg(edge), edge);
     m_resolution->setCurrentIndex(1);
+    addField(QStringLiteral("출력 크기"), m_resolution);
     m_fps = new QComboBox;
     for (int fps : {10, 15, 25, 30, 60}) m_fps->addItem(QStringLiteral("%1 FPS").arg(fps), fps);
     m_fps->setCurrentIndex(2);
-    quality->addWidget(m_resolution, 1);
-    quality->addWidget(m_fps);
-    form->addRow(QStringLiteral("해상도 / 속도"), quality);
     m_bitrate = new QSpinBox;
     m_bitrate->setRange(100, 100000);
     m_bitrate->setSingleStep(500);
     m_bitrate->setValue(5000);
     m_bitrate->setSuffix(QStringLiteral(" kbps"));
-    form->addRow(QStringLiteral("비트레이트"), m_bitrate);
+    auto *quality = new QHBoxLayout;
+    quality->setSpacing(10);
+    for (auto entry : {std::pair<QString, QWidget *>(QStringLiteral("프레임 속도"), m_fps),
+                       std::pair<QString, QWidget *>(QStringLiteral("비트레이트"), m_bitrate)}) {
+        auto *field = new QVBoxLayout;
+        field->setSpacing(4);
+        auto *caption = label(entry.first, "fieldLabel");
+        caption->setBuddy(entry.second);
+        entry.second->setAccessibleName(entry.first);
+        field->addWidget(caption);
+        field->addWidget(entry.second);
+        quality->addLayout(field, 1);
+    }
+    form->addLayout(quality);
     m_codec = new QComboBox;
     m_codec->addItem(QStringLiteral("H.264 · MP4"), static_cast<int>(QMediaFormat::VideoCodec::H264));
     m_codec->addItem(QStringLiteral("MPEG-4 · MP4 (호환 모드)"), static_cast<int>(QMediaFormat::VideoCodec::MPEG4));
-    form->addRow(QStringLiteral("비디오 코덱"), m_codec);
+    addField(QStringLiteral("비디오 코덱"), m_codec);
+    form->addWidget(separator());
     m_audio = new QComboBox;
-    form->addRow(QStringLiteral("오디오 입력"), m_audio);
-    auto *hint = new QLabel(wayland
+    m_audio->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    addField(QStringLiteral("오디오 입력"), m_audio);
+    auto *hint = label(wayland
         ? QStringLiteral("Wayland에서는 시작 시 시스템 공유 창에서 대상을 선택합니다. 화면 일부를 자르려면 X11 세션을 사용하세요.")
-        : QStringLiteral("원본 화면 비율을 유지합니다. 시스템 소리는 별도 루프백 입력 장치가 필요합니다."));
+        : QStringLiteral("시스템 소리를 담으려면 별도의 루프백 입력 장치를 선택하세요."), "hint");
     hint->setWordWrap(true);
-    hint->setStyleSheet(QStringLiteral("color: #707070;"));
-    form->addRow(hint);
-    layout->addWidget(group);
+    form->addWidget(hint);
+    form->addStretch();
+    scroll->setWidget(settings);
+    settingsLayout->addWidget(scroll, 1);
+    body->addWidget(settingsCard);
+    layout->addLayout(body, 1);
 
-    m_video = new QVideoWidget;
-    m_video->setMinimumSize(480, 240);
-    m_video->setAspectRatioMode(Qt::KeepAspectRatio);
-    m_video->setStyleSheet(QStringLiteral("background: #15171a;"));
-    layout->addWidget(m_video, 1);
-    m_controller.setVideoSink(m_video->videoSink());
-
+    auto *controls = new QFrame;
+    controls->setObjectName(QStringLiteral("controlBar"));
+    auto *controlLayout = new QVBoxLayout(controls);
+    controlLayout->setContentsMargins(20, 14, 20, 12);
+    controlLayout->setSpacing(10);
     auto *buttons = new QHBoxLayout;
-    m_record = new QPushButton(QStringLiteral("● 녹화 시작"));
-    m_record->setStyleSheet(QStringLiteral("QPushButton:enabled { background: #c52e39; color: white; border-radius: 5px; padding: 8px 15px; }"));
-    m_preview = new QPushButton(QStringLiteral("미리보기"));
-    m_pause = new QPushButton(QStringLiteral("일시정지"));
-    m_stop = new QPushButton(QStringLiteral("중지 및 저장"));
-    for (auto *button : {m_record, m_preview, m_pause, m_stop}) buttons->addWidget(button);
+    buttons->setSpacing(10);
+    auto *timerLayout = new QVBoxLayout;
+    timerLayout->setSpacing(0);
+    timerLayout->addWidget(label(QStringLiteral("녹화 시간"), "fieldLabel"));
+    m_clock = label(QStringLiteral("00:00:00"), "timer");
+    m_clock->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    m_clock->setAccessibleDescription(QStringLiteral("녹화 시간"));
+    timerLayout->addWidget(m_clock);
+    buttons->addLayout(timerLayout);
     buttons->addStretch();
-    m_reveal = new QPushButton(QStringLiteral("저장 폴더"));
+    m_record = button(QStringLiteral("녹화 시작"), Icon::Record, "recordButton");
+    m_record->setIcon(UiTheme::icon(Icon::Record, Qt::white));
+    m_pause = button(QStringLiteral("일시정지"), Icon::Pause);
+    m_stop = button(QStringLiteral("중지 및 저장"), Icon::Stop);
+    m_reveal = button(QStringLiteral("저장 폴더"), Icon::Folder);
     m_reveal->setEnabled(false);
+    for (auto *item : {m_record, m_pause, m_stop}) buttons->addWidget(item);
+    buttons->addSpacing(6);
     buttons->addWidget(m_reveal);
-    layout->addLayout(buttons);
-    m_status = new QLabel(QStringLiteral("녹화 대상을 선택하세요."));
+    controlLayout->addLayout(buttons);
+    controlLayout->addWidget(separator());
+    m_status = label(QStringLiteral("녹화 대상을 선택하세요."), "statusText");
     m_status->setWordWrap(true);
     m_status->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    layout->addWidget(m_status);
+    controlLayout->addWidget(m_status);
+    layout->addWidget(controls);
     setCentralWidget(central);
+    const QList<QWidget *> focusOrder = {m_sourceType, m_target, m_pickWindow, m_pickRegion, refresh,
+        m_resolution, m_fps, m_bitrate, m_codec, m_audio, m_preview, m_record, m_pause, m_stop, m_reveal};
+    for (qsizetype i = 1; i < focusOrder.size(); ++i)
+        QWidget::setTabOrder(focusOrder[i - 1], focusOrder[i]);
 
     auto *fileMenu = menuBar()->addMenu(QStringLiteral("파일"));
     auto *quit = fileMenu->addAction(QStringLiteral("종료"));
@@ -168,7 +303,11 @@ MainWindow::MainWindow() {
     connect(m_pickRegion, &QPushButton::clicked, this, &MainWindow::pickRegion);
     connect(m_sourceType, &QComboBox::currentIndexChanged, this, &MainWindow::refreshTargets);
     connect(m_target, &QComboBox::currentIndexChanged, this, [this] {
+        m_target->setToolTip(m_target->currentText());
         updateRegionLabel(); updateState(m_controller.state());
+    });
+    connect(m_audio, &QComboBox::currentIndexChanged, this, [this] {
+        m_audio->setToolTip(m_audio->currentText());
     });
     connect(&m_devices, &QMediaDevices::audioInputsChanged, this, [this] {
         if (m_controller.state() == RecorderController::State::Idle) refreshAudio();
@@ -234,7 +373,8 @@ void MainWindow::refreshTargets() {
                 target.regionScreenSize = previous.regionScreenSize;
             }
             m_targets.append(target);
-            m_target->addItem(QStringLiteral("%1 · %2 × %3").arg(screen->name())
+            const auto name = screen->name().isEmpty() ? QStringLiteral("디스플레이 %1").arg(m_targets.size()) : screen->name();
+            m_target->addItem(QStringLiteral("%1 · %2 × %3").arg(name)
                 .arg(screen->size().width()).arg(screen->size().height()));
         }
     } else {
@@ -396,8 +536,38 @@ void MainWindow::updateState(RecorderController::State state) {
     m_preview->setEnabled(idle && hasTarget);
     m_pause->setEnabled(state == State::Recording || state == State::Paused);
     m_pause->setText(state == State::Paused ? QStringLiteral("재개") : QStringLiteral("일시정지"));
+    m_pause->setIcon(UiTheme::icon(state == State::Paused ? UiTheme::Icon::Play : UiTheme::Icon::Pause));
     m_stop->setEnabled(!idle && state != State::Stopping);
     m_stop->setText(preview ? QStringLiteral("미리보기 종료") : QStringLiteral("중지 및 저장"));
+
+    QString badge, tone;
+    switch (state) {
+    case State::Idle: badge = QStringLiteral("대기 중"); break;
+    case State::WaitingForPermission: badge = QStringLiteral("권한 확인 중"); tone = QStringLiteral("active"); break;
+    case State::Starting: badge = QStringLiteral("준비 중"); tone = QStringLiteral("active"); break;
+    case State::Preview: badge = QStringLiteral("미리보기 중"); tone = QStringLiteral("active"); break;
+    case State::Recording: badge = QStringLiteral("녹화 중"); tone = QStringLiteral("recording"); break;
+    case State::Paused: badge = QStringLiteral("일시정지"); tone = QStringLiteral("paused"); break;
+    case State::Stopping: badge = QStringLiteral("마무리 중"); tone = QStringLiteral("active"); break;
+    }
+    m_stateBadge->setText(QStringLiteral("●  %1").arg(badge));
+    if (m_stateBadge->property("tone").toString() != tone) {
+        m_stateBadge->setProperty("tone", tone);
+        m_stateBadge->style()->unpolish(m_stateBadge);
+        m_stateBadge->style()->polish(m_stateBadge);
+    }
+    const bool showVideo = preview || state == State::Recording || state == State::Paused || state == State::Stopping;
+    m_previewStack->setCurrentIndex(showVideo ? 1 : 0);
+    if (state == State::WaitingForPermission) {
+        m_emptyTitle->setText(QStringLiteral("화면 공유를 기다리고 있어요"));
+        m_emptyHint->setText(QStringLiteral("권한 요청이나 시스템 공유 창을 확인하세요.\n중지 버튼으로 취소할 수 있습니다."));
+    } else if (state == State::Starting) {
+        m_emptyTitle->setText(QStringLiteral("화면을 준비하고 있어요"));
+        m_emptyHint->setText(QStringLiteral("선택한 화면을 불러오면 여기에 표시됩니다."));
+    } else if (idle) {
+        m_emptyTitle->setText(QStringLiteral("어떤 화면을 담아볼까요?"));
+        m_emptyHint->setText(QStringLiteral("오른쪽에서 녹화 대상을 선택한 뒤\n미리보기 또는 녹화를 시작하세요."));
+    }
     if (idle && m_closing) QTimer::singleShot(0, this, [this] { if (m_closing) close(); });
 }
 
