@@ -102,6 +102,11 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME region_picker COMMAND region_picker_tests)
     set_tests_properties(region_picker PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME region_picker_multiple_screens COMMAND region_picker_tests --multi-screen
+        -platform "offscreen:configfile=qt/tests/fixtures/multiple-screens.json")
+    set_tests_properties(region_picker_multiple_screens PROPERTIES TIMEOUT 15
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "QT_SCALE_FACTOR_ROUNDING_POLICY=PassThrough")
 
     qt_add_executable(region_recording_tests qt/tests/RegionRecordingTests.cpp
         qt/src/RecorderController.cpp qt/src/RecorderController.h qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp)
@@ -169,6 +174,11 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME main_window COMMAND main_window_tests)
     set_tests_properties(main_window PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME main_window_multiple_screens COMMAND main_window_tests --multi-screen
+        -platform "offscreen:configfile=qt/tests/fixtures/multiple-screens.json")
+    set_tests_properties(main_window_multiple_screens PROPERTIES TIMEOUT 15
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "QT_SCALE_FACTOR_ROUNDING_POLICY=PassThrough")
 
     qt_add_executable(media_smoke qt/tests/MediaSmoke.cpp qt/src/MediaFormat.cpp)
     target_include_directories(media_smoke PRIVATE qt/src)

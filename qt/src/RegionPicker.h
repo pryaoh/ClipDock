@@ -1,5 +1,6 @@
 #pragma once
 #include <QPointer>
+#include <QList>
 #include <QRect>
 #include <QWidget>
 
@@ -29,5 +30,20 @@ private:
     QPointF m_anchor;
     QRect m_region;
     bool m_dragging = false;
+    bool m_finished = false;
+};
+
+// One overlay per display keeps each drag in that display's logical coordinates.
+class RegionSelection final : public QObject {
+    Q_OBJECT
+public:
+    explicit RegionSelection(QObject *parent = nullptr);
+    ~RegionSelection() override;
+    void start(QScreen *preferredScreen);
+signals:
+    void finished(QScreen *screen, const QRect &region);
+private:
+    void finish(QScreen *screen = nullptr, const QRect &region = {});
+    QList<RegionPicker *> m_overlays;
     bool m_finished = false;
 };

@@ -170,7 +170,7 @@ MainWindow::MainWindow() {
         ? QStringLiteral("화면에 보이는 창을 클릭하여 녹화 대상으로 선택합니다. Esc 또는 오른쪽 클릭으로 취소합니다.")
         : QStringLiteral("이 환경에서는 목록 또는 운영체제의 화면 공유 선택 창을 사용하세요."));
     m_pickRegion = button(QStringLiteral("영역 지정"), Icon::Region, "pickRegionButton");
-    m_pickRegion->setToolTip(QStringLiteral("선택한 모니터에서 녹화할 사각형을 드래그하세요. Esc 또는 오른쪽 클릭으로 취소합니다."));
+    m_pickRegion->setToolTip(QStringLiteral("원하는 모니터에서 녹화할 사각형을 드래그하세요. Esc 또는 오른쪽 클릭으로 취소합니다."));
     sourceActions->addWidget(m_pickWindow, 1);
     sourceActions->addWidget(m_pickRegion, 1);
     sourceActions->addWidget(refresh, 1);
@@ -413,7 +413,7 @@ void MainWindow::refreshTargets() {
 void MainWindow::updateRegionLabel() {
     const int index = m_target->currentIndex();
     if (index < 0 || index >= m_targets.size() || m_targets[index].region.isEmpty()) {
-        m_regionLabel->setText(QStringLiteral("모니터를 선택하고 '영역 지정'을 누르세요. 영역 안에 보이는 모든 내용이 녹화됩니다."));
+        m_regionLabel->setText(QStringLiteral("'영역 지정'을 누르고 원하는 모니터에서 드래그하세요. 영역 안에 보이는 모든 내용이 녹화됩니다."));
         m_pickRegion->setText(QStringLiteral("영역 지정"));
         return;
     }
@@ -424,19 +424,23 @@ void MainWindow::updateRegionLabel() {
 }
 
 void MainWindow::pickRegion() {
-    const int index = m_target->currentIndex();
     if (m_regionPicker || m_controller.state() != RecorderController::State::Idle
-        || m_sourceType->currentIndex() != 2 || index < 0 || index >= m_targets.size()) return;
+        || m_sourceType->currentIndex() != 2) return;
+    // A display may have been connected since the target list was last shown.
+    refreshTargets();
+    const int index = m_target->currentIndex();
+    if (index < 0 || index >= m_targets.size()) return;
     const QPointer<QScreen> screen = m_targets[index].screen;
     if (!screen) { refreshTargets(); return; }
-    const QSize screenSize = screen->size();
-    m_regionPicker = new RegionPicker(screen);
-    connect(m_regionPicker, &RegionPicker::finished, this, [this, screen, screenSize](const QRect &region) {
-        if (!region.isEmpty() && screen && screen->size() == screenSize) {
-            for (auto &target : m_targets) {
-                if (target.isRegion && target.screen == screen) {
+    m_regionPicker = new RegionSelection(this);
+    connect(m_regionPicker, &RegionSelection::finished, this, [this](QScreen *selectedScreen, const QRect &region) {
+        if (!region.isEmpty() && selectedScreen) {
+            for (qsizetype i = 0; i < m_targets.size(); ++i) {
+                auto &target = m_targets[i];
+                if (target.isRegion && target.screen == selectedScreen) {
                     target.region = region;
-                    target.regionScreenSize = screenSize;
+                    target.regionScreenSize = selectedScreen->size();
+                    m_target->setCurrentIndex(int(i));
                     break;
                 }
             }
@@ -447,7 +451,7 @@ void MainWindow::pickRegion() {
         show(); raise(); activateWindow();
     });
     hide();
-    m_regionPicker->start();
+    m_regionPicker->start(screen);
 }
 
 void MainWindow::pickWindow() {

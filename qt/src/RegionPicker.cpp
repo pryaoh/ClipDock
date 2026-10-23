@@ -100,3 +100,41 @@ void RegionPicker::finish(const QRect &region) {
     emit finished(selected);
     deleteLater();
 }
+
+RegionSelection::RegionSelection(QObject *parent) : QObject(parent) {
+    connect(qApp, &QGuiApplication::screenAdded, this, [this] { finish(); });
+    connect(qApp, &QGuiApplication::screenRemoved, this, [this] { finish(); });
+}
+
+RegionSelection::~RegionSelection() { qDeleteAll(m_overlays); }
+
+void RegionSelection::start(QScreen *preferredScreen) {
+    if (m_finished || !m_overlays.isEmpty()) return;
+    RegionPicker *focusOverlay = nullptr;
+    for (auto *screen : QGuiApplication::screens()) {
+        auto *overlay = new RegionPicker(screen);
+        m_overlays.append(overlay);
+        const QPointer<QScreen> selectedScreen = screen;
+        connect(overlay, &RegionPicker::finished, this, [this, selectedScreen](const QRect &region) {
+            if (selectedScreen && !region.isEmpty()) finish(selectedScreen, region);
+            else finish();
+        });
+        overlay->start();
+        if (screen == preferredScreen) focusOverlay = overlay;
+    }
+    if (m_overlays.isEmpty()) { finish(); return; }
+    if (!focusOverlay) focusOverlay = m_overlays.front();
+    focusOverlay->raise();
+    focusOverlay->activateWindow();
+    focusOverlay->setFocus();
+}
+
+void RegionSelection::finish(QScreen *screen, const QRect &region) {
+    if (m_finished) return;
+    m_finished = true;
+    const auto selected = region;
+    // Other monitors must also be clear before the UI can start recording.
+    for (auto *overlay : m_overlays) overlay->hide();
+    emit finished(screen, selected);
+    deleteLater();
+}

@@ -5,6 +5,7 @@
 #include <QMouseEvent>
 #include <QPointer>
 #include <QScreen>
+#include <QWindow>
 #include <cstdlib>
 #include <iostream>
 
@@ -19,6 +20,26 @@ static void mouse(QWidget *widget, QEvent::Type type, QPointF p, Qt::MouseButton
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     app.setQuitOnLastWindowClosed(false);
+    if (app.arguments().contains(QStringLiteral("--multi-screen")))
+        check(app.screens().size() == 4, "multi-monitor fixture loads all four displays");
+    for (auto *screen : app.screens()) {
+        QPointer<RegionPicker> picker = new RegionPicker(screen);
+        QRect selected;
+        QObject::connect(picker, &RegionPicker::finished, &app, [&](const QRect &r) { selected = r; });
+        picker->start();
+        app.processEvents();
+        std::cout << "Monitor: " << screen->name().toStdString()
+                  << " scale=" << screen->devicePixelRatio() << '\n';
+        check(picker->windowHandle()->screen() == screen, "overlay belongs to the selected monitor");
+        check(picker->geometry() == screen->geometry(), "overlay covers the entire selected monitor");
+        check(picker->mapToGlobal(QPoint()) == screen->geometry().topLeft(),
+              "overlay origin matches positive or negative monitor coordinates");
+        mouse(picker, QEvent::MouseButtonPress, {20, 30}, Qt::LeftButton);
+        mouse(picker, QEvent::MouseButtonRelease, {180, 140}, Qt::LeftButton);
+        check(selected == QRect(20, 30, 160, 110), "extended-monitor selection stays screen-local");
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        check(!picker, "extended-monitor overlay cleaned up");
+    }
     check(regionPixelRect({100, 50, 320, 180}, {1000, 600}, {2000, 1200}) == QRect(200, 100, 640, 360), "Retina crop");
     check(regionPixelRect({20, 40, 200, 100}, {800, 600}, {1000, 750}) == QRect(25, 50, 250, 125), "fractional scale");
     check(regionPixelRect({900, 500, 100, 100}, {1000, 600}, {1500, 900}) == QRect(1350, 750, 150, 150), "bottom right bounds");

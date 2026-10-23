@@ -13,7 +13,7 @@ class QStackedWidget;
 class QCloseEvent;
 class QWidget;
 class WindowPicker;
-class RegionPicker;
+class RegionSelection;
 
 class MainWindow final : public QMainWindow {
     Q_OBJECT
@@ -48,7 +48,7 @@ private:
     QPushButton *m_preview = nullptr;
     QPushButton *m_pickWindow = nullptr;
     QPointer<WindowPicker> m_picker;
-    QPointer<RegionPicker> m_regionPicker;
+    QPointer<RegionSelection> m_regionPicker;
     QPushButton *m_pickRegion = nullptr;
     QLabel *m_regionLabel = nullptr;
     QPushButton *m_pause = nullptr;
