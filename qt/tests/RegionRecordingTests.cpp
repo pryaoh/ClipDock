@@ -34,6 +34,11 @@ public:
     static void grantPermission(RecorderController &controller, quint64 generation) {
         controller.completePermissionRequest(generation, true, true);
     }
+    static bool readyToRecord(const RecorderController &controller) {
+        return controller.m_state == RecorderController::State::Starting
+            && !controller.m_sourceSize.isEmpty() && controller.m_temporary
+            && !controller.m_writerStarted;
+    }
 };
 
 int main(int argc, char **argv) {
@@ -61,6 +66,12 @@ int main(int argc, char **argv) {
         app.exit(1);
     };
     int captureErrors = 0;
+    int readySignals = 0;
+    QObject::connect(&controller, &RecorderController::recordingAboutToStart, &app, [&] {
+        ++readySignals;
+        if (!RecorderControllerTestPeer::readyToRecord(controller))
+            fail(QStringLiteral("recording UI preparation must follow permissions, source frame and output setup"));
+    });
     QObject::connect(&controller, &RecorderController::errorOccurred, &app, [&](const QString &message) {
         if (captureFailure && message == QStringLiteral("injected capture interruption")) ++captureErrors;
         else fail(message);
@@ -108,6 +119,7 @@ int main(int argc, char **argv) {
             return;
         }
         if (captureFailure && captureErrors != 1) { fail(QStringLiteral("capture failure was not exercised")); return; }
+        if (readySignals != 1) { fail(QStringLiteral("recording preparation must run exactly once, never on resume")); return; }
         // 2s recording + 1s paused. Pause must not lengthen the saved movie.
         if (decoded < 20 || previewFrames < 20 || player.duration() < 1500 || player.duration() > 2500) {
             fail(QStringLiteral("frames=%1, preview=%2, duration=%3").arg(decoded).arg(previewFrames).arg(player.duration()));
@@ -132,12 +144,13 @@ int main(int argc, char **argv) {
         RecorderControllerTestPeer::preview(controller, target);
         RecorderControllerTestPeer::frame(controller, desktop);
         if (controller.state() != RecorderController::State::Preview) { fail(QStringLiteral("preview did not start")); return; }
+        if (readySignals != 0) { fail(QStringLiteral("preview must not prepare the recording UI")); return; }
         RecordingOptions options;
         const auto output = directory.filePath(QStringLiteral("region.mp4"));
         if (delayedPermission) {
             const auto generation = RecorderControllerTestPeer::waitForPermission(controller, output);
             QTimer::singleShot(500, &controller, [&, generation] {
-                if (controller.state() != RecorderController::State::WaitingForPermission || previewFrames < 3) {
+                if (controller.state() != RecorderController::State::WaitingForPermission || previewFrames < 3 || readySignals != 0) {
                     fail(QStringLiteral("preview must continue without recording until permission is granted"));
                     return;
                 }

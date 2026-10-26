@@ -5,6 +5,7 @@
 #include <QList>
 
 class QComboBox;
+class QCheckBox;
 class QSpinBox;
 class QPushButton;
 class QLabel;
@@ -22,6 +23,8 @@ class MainWindow final : public QMainWindow {
 public:
     MainWindow();
 protected:
+    bool event(QEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
 private:
     friend class MainWindowTestPeer;
@@ -32,6 +35,11 @@ private:
     void refreshAudio();
     void begin(bool recording);
     void updateState(RecorderController::State state);
+    void applyCaptureExclusion();
+    void updatePreview();
+    bool overlapsCapture() const;
+    bool needsFallbackMinimize() const;
+    void minimizeForRecording();
     void showError(const QString &message);
     void dispatchShortcut(ShortcutAction action, const QString &activationToken = QString());
 
@@ -47,6 +55,8 @@ private:
     QComboBox *m_audio = nullptr;
     QComboBox *m_codec = nullptr;
     QSpinBox *m_bitrate = nullptr;
+    QCheckBox *m_excludeSelf = nullptr;
+    QCheckBox *m_minimizeRecording = nullptr;
     QPushButton *m_record = nullptr;
     QPushButton *m_preview = nullptr;
     QPushButton *m_pickWindow = nullptr;
@@ -64,9 +74,16 @@ private:
     QLabel *m_stateBadge = nullptr;
     QLabel *m_emptyTitle = nullptr;
     QLabel *m_emptyHint = nullptr;
+    QLabel *m_captureHint = nullptr;
     QStackedWidget *m_previewStack = nullptr;
     QVideoWidget *m_video = nullptr;
     QString m_lastFile;
     bool m_closing = false;
     bool m_portalCapture = false;
+    bool m_captureReady = false;
+    bool m_captureExcluded = false;
+    bool m_autoMinimized = false;
+    bool m_restoreMaximized = false;
+    bool m_fallbackPausePending = false;
+    RecorderController::State m_captureState = RecorderController::State::Idle;
 };

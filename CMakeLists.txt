@@ -72,7 +72,7 @@ qt_add_executable(ClipDock WIN32 MACOSX_BUNDLE
 )
 target_link_libraries(ClipDock PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts)
 qt_add_resources(ClipDock ui_icons PREFIX /clipdock BASE qt/resources
-    FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm)
+    FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm qt/resources/checkmark.xpm)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Qt marks Wayland platform plugins as non-default, so deployment otherwise
     # includes only XCB. The module also supplies shell/decoration integrations.
@@ -197,7 +197,7 @@ if(BUILD_TESTING)
     target_include_directories(main_window_tests PRIVATE qt/src)
     target_link_libraries(main_window_tests PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts)
     qt_add_resources(main_window_tests ui_icons PREFIX /clipdock BASE qt/resources
-        FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm)
+        FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm qt/resources/checkmark.xpm)
     if(APPLE OR WIN32)
         target_link_libraries(main_window_tests PRIVATE Qt6::MultimediaPrivate)
     endif()
@@ -210,7 +210,15 @@ if(BUILD_TESTING)
         target_compile_options(main_window_tests PRIVATE /utf-8)
     endif()
     add_test(NAME main_window COMMAND main_window_tests)
-    set_tests_properties(main_window PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    set_tests_properties(main_window PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME main_window_startup_policy COMMAND main_window_tests --startup-policy)
+    add_test(NAME main_window_move_into_capture COMMAND main_window_tests --move-into-capture)
+    set_tests_properties(main_window_startup_policy main_window_move_into_capture
+        PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    if(WIN32)
+        add_test(NAME main_window_capture_affinity COMMAND main_window_tests --capture-affinity)
+        set_tests_properties(main_window_capture_affinity PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=windows")
+    endif()
     add_test(NAME main_window_multiple_screens COMMAND main_window_tests --multi-screen
         -platform "offscreen:configfile=qt/tests/fixtures/multiple-screens.json")
     set_tests_properties(main_window_multiple_screens PROPERTIES TIMEOUT 15

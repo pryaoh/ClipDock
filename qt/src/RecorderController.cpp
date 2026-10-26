@@ -222,6 +222,8 @@ void RecorderController::startWriter() {
     } else m_session.setAudioInput(nullptr);
     configureRecorder(m_recorder, m_options, QSize(width, height), m_codec);
     m_recorder.setOutputLocation(QUrl::fromLocalFile(m_temporary->fileName()));
+    emit recordingAboutToStart();
+    if (m_state != State::Starting || m_writerStarted) return;
     m_writerStarted = true;
     m_regionClock.start();
     m_regionPausedAt = -1;

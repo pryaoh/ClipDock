@@ -4,6 +4,23 @@
 
 ①은 먼저 추가할 기능, ②는 다음 확장, ③은 장기 확장입니다.
 
+## 구현 상태 (2026-10-26)
+
+- [x] 영역 지정 녹화: 확장 모니터 선택과 혼합 DPI 좌표 처리 구현 (`ab3955b`).
+- [x] 자기 창 캡처 방지: 캡처 제외 기본 켜기, 녹화 시 최소화 별도 옵션과 저장,
+  Windows 네이티브 제외 및 미지원 환경의 최소화·미리보기 중첩 방지.
+- [x] 전역 단축키 구현: Windows/macOS/X11 및 Wayland 포털, 충돌 안내·상태 보호·회귀 테스트 (`36c6cf5`, `d0072ff`).
+  [이슈 #1](https://github.com/pryaoh/ClipDock/issues/1)은 `feat/global-shortcuts` 브랜치에 구현되어 있으며,
+  main 반영과 Windows/macOS 실제 키 입력·Wayland 승인 UI 확인은 남아 있습니다.
+- [ ] [설정·영역 복원 #2](https://github.com/pryaoh/ClipDock/issues/2),
+  [플랫폼 실환경 검증 #3](https://github.com/pryaoh/ClipDock/issues/3),
+  [카운트다운 #4](https://github.com/pryaoh/ClipDock/issues/4),
+  [작은 컨트롤바 #5](https://github.com/pryaoh/ClipDock/issues/5),
+  [시스템 오디오+마이크 #6](https://github.com/pryaoh/ClipDock/issues/6)은 미완료입니다.
+- [ ] [설치파일 #7](https://github.com/pryaoh/ClipDock/issues/7)은 보류 상태입니다.
+
+아래 표는 구현된 기능을 포함한 전체 확장 목록입니다.
+
 ## 녹화 기능
 
 | 기능 | 사용 예시 | 우선 |

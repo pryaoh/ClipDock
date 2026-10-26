@@ -41,12 +41,14 @@ public:
     ~RecorderController() override;
     void setVideoSink(QVideoSink *sink);
     State state() const { return m_state; }
+    const Target &target() const { return m_target; }
     void start(const Target &target, const RecordingOptions &options, const QAudioDevice &audio,
                QMediaFormat::VideoCodec codec, const QString &outputPath = {});
     void togglePause();
     void stop();
 
 signals:
+    void recordingAboutToStart(); // Permissions, first frame and output preparation are complete.
     void stateChanged(State state);
     void durationChanged(qint64 milliseconds);
     void statusChanged(const QString &message);
