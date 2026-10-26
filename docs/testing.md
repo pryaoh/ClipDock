@@ -20,11 +20,23 @@
 | `recording_delayed_permission` | 권한 응답 대기 중 미리보기와 승인 후 녹화 |
 | `recorder_lifecycle` | 권한 거부·취소·늦은 응답, 대상 소실, 인코더 오류 시 임시 파일 보존 |
 | `main_window` | 저장 대화상자가 열린 동안 대상 목록이 바뀌어도 원래 선택 유지 |
+| `global_shortcuts` | 키별 등록 성공/충돌, 앱 내 대체 경로, 중복·반복 입력 억제, 비동기 전달, 재등록 시 이전 명령 무효화 |
+| `native_global_shortcuts` (Windows) | 실제 OS 키 등록 충돌, 메시지 수신, 재등록, 소유한 등록만 해제하는지 검증 |
+| `mac_shortcut_keys` (macOS) | 시스템에 포함된 US·Dvorak 배열의 실제 키 변환 데이터와 배열 소실 시 대체 경로 검증 |
+| `x11_global_shortcuts` (Linux) | Xvfb/XTest로 다른 X 클라이언트에 포커스를 둔 키 입력, 키 반복, Caps Lock, 충돌과 등록 해제 검증 |
+| `portal_global_shortcuts` (Linux) | 격리된 D-Bus 서비스로 일부 승인·취소·미지원, 시스템 지정 키 표시, 반복 입력, 늦은 응답과 세션 정리 검증 |
 | `linux_screen_capture` (Linux) | `xvfb`와 `xauth` 설치 시 가상 X11 화면의 실제 캡처 프레임 |
 
 ## 수동 확인 범위
 
 Wayland 포털 승인 및 실제 마이크 입력은 그래픽 데스크톱에서 별도로 확인해야 합니다.
+전역 단축키의 Windows/macOS 실제 키 입력과 Wayland 데스크톱 승인 UI도 실제 환경에서 확인해야 합니다.
+Windows 자동 테스트는 실제 등록과 `WM_HOTKEY` 메시지 전달을 검사하며 물리 키 입력을 대신하지 않습니다.
+X11 테스트는 첫 입력, 보조 키를 놓은 상태의 오입력 차단, 겹친 단축키 이후의 정상 입력도 확인합니다.
+Wayland 테스트는 창 활성화 토큰의 비동기 전달도 확인하지만, 실제 창 포커스 전환은 데스크톱에서 확인해야 합니다.
+포털 테스트는 프로토콜과 앱 상태 처리를 검증하며 모든 데스크톱 백엔드의 동작을 보장하지 않습니다.
+`main_window`는 저장 창 재진입, 모달 대화상자 및 파일 마무리 상태의 단축키 차단도 검증합니다.
+Linux 단축키 테스트에는 `libxtst-dev`, `xvfb`, `xauth`, `dbus-daemon`이 필요합니다.
 헤드리스 환경에서도 가능한 소프트웨어 MPEG-4 코덱을 사용하며 H.264 하드웨어 인코더 검증을
 대체하지 않습니다.
 

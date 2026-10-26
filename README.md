@@ -101,7 +101,7 @@ sudo apt install build-essential cmake ninja-build python3-venv \
   libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
   libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-xfixes0 \
   libx11-xcb1 libwayland-dev libwayland-client0 libwayland-cursor0 libwayland-egl1 \
-  libpipewire-0.3-0
+  libpipewire-0.3-0 libx11-dev libxtst-dev dbus-daemon
 bash run-linux.sh
 ```
 
