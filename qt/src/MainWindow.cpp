@@ -3,6 +3,7 @@
 #include "WindowPicker.h"
 #include "RegionPicker.h"
 #include "UiTheme.h"
+#include "GlobalShortcuts.h"
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -19,6 +20,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScreen>
+#include <QScopedValueRollback>
 #include <QScrollArea>
 #include <QShortcut>
 #include <QSpinBox>
@@ -255,7 +257,11 @@ MainWindow::MainWindow() {
     m_status = label(QStringLiteral("녹화 대상을 선택하세요."), "statusText");
     m_status->setWordWrap(true);
     m_status->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    controlLayout->addWidget(m_status);
+    auto *statusRow = new QHBoxLayout;
+    statusRow->addWidget(m_status, 1);
+    auto *shortcutStatus = label({}, "shortcutStatus");
+    statusRow->addWidget(shortcutStatus);
+    controlLayout->addLayout(statusRow);
     layout->addWidget(controls);
     setCentralWidget(central);
     const QList<QWidget *> focusOrder = {m_sourceType, m_target, m_pickWindow, m_pickRegion, refresh,
@@ -287,9 +293,9 @@ MainWindow::MainWindow() {
         QMessageBox::information(this, QStringLiteral("ClipDock"),
             QStringLiteral("화면/창 선택 → 미리보기 또는 녹화 시작 → 중지 및 저장\n\n"
                            "창 모드의 '클릭으로 선택': 원하는 창을 클릭하세요. Esc/오른쪽 클릭으로 취소합니다.\n\n"
-                           "영역 모드: 모니터 선택 → 영역 지정 → 드래그 → 미리보기 또는 녹화 시작.\n"
+                           "영역 모드: 영역 지정 → 원하는 모니터에서 드래그 → 미리보기 또는 녹화 시작.\n"
                            "한 모니터 안에서 16 × 16 이상으로 선택하세요. 영역 안에 겹친 창도 녹화됩니다.\n\n"
-                           "단축키 (앱에 포커스가 있을 때):\n"
+                           "단축키 (전역 등록 상태는 도움말 → 단축키 상태에서 확인):\n"
                            "Ctrl/⌘+Shift+R 녹화 · Ctrl/⌘+Shift+P 일시정지 · Ctrl/⌘+Shift+S 중지\n\n"
                            "macOS: 화면 기록 권한을 허용한 뒤 재실행하세요.\n"
                            "Linux X11: 화면·창 목록 또는 영역 지정을 사용하세요.\n"
@@ -334,12 +340,21 @@ MainWindow::MainWindow() {
         m_clock->setText(QStringLiteral("%1:%2:%3").arg(seconds / 3600, 2, 10, QLatin1Char('0'))
             .arg(seconds / 60 % 60, 2, 10, QLatin1Char('0')).arg(seconds % 60, 2, 10, QLatin1Char('0')));
     });
-    auto *recordShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+R")), this);
-    connect(recordShortcut, &QShortcut::activated, this, [this] { if (m_record->isEnabled()) begin(true); });
-    auto *pauseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")), this);
-    connect(pauseShortcut, &QShortcut::activated, &m_controller, &RecorderController::togglePause);
-    auto *stopShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+S")), this);
-    connect(stopShortcut, &QShortcut::activated, &m_controller, &RecorderController::stop);
+    m_shortcuts = new GlobalShortcuts(this);
+    connect(m_shortcuts, &GlobalShortcuts::activated, this, &MainWindow::dispatchShortcut);
+    connect(m_shortcuts, &GlobalShortcuts::statusChanged, this, [this, shortcutStatus] {
+        shortcutStatus->setText(QStringLiteral("전역 단축키 %1/3").arg(m_shortcuts->registeredCount()));
+        shortcutStatus->setToolTip(m_shortcuts->description());
+        shortcutStatus->setAccessibleDescription(m_shortcuts->description());
+    });
+    connect(help->addAction(QStringLiteral("단축키 상태")), &QAction::triggered, this, [this] {
+        QMessageBox::information(this, QStringLiteral("단축키 상태"), m_shortcuts->description()
+            + QStringLiteral("\n\n전역 등록에 실패한 키는 앱에 포커스가 있을 때 사용할 수 있습니다.\n"
+                             "충돌하는 앱의 설정을 변경한 뒤 '전역 단축키 다시 등록'을 선택하세요."));
+    });
+    connect(help->addAction(QStringLiteral("전역 단축키 다시 등록")), &QAction::triggered,
+            m_shortcuts, &GlobalShortcuts::retry);
+    m_shortcuts->retry();
     refreshTargets();
     refreshAudio();
     updateState(RecorderController::State::Idle);
@@ -499,6 +514,10 @@ void MainWindow::refreshAudio() {
 }
 
 void MainWindow::begin(bool recording) {
+    if (m_selectingOutput || m_closing || m_picker || m_regionPicker
+        || (m_controller.state() != RecorderController::State::Idle
+            && m_controller.state() != RecorderController::State::Preview)) return;
+    QScopedValueRollback<bool> selecting(m_selectingOutput, true);
     const int target = m_target->currentIndex();
     if (target < 0 || target >= m_targets.size()) return;
     // A modal file dialog still processes screen removal and target-list refresh events.
@@ -525,6 +544,33 @@ void MainWindow::begin(bool recording) {
     }
     m_controller.start(selectedTarget, options, audio,
         static_cast<QMediaFormat::VideoCodec>(m_codec->currentData().toInt()), outputPath);
+}
+
+void MainWindow::dispatchShortcut(ShortcutAction action, const QString &activationToken) {
+    if (m_selectingOutput || m_closing || m_picker || m_regionPicker
+        || QApplication::activeModalWidget()) return;
+    switch (action) {
+    case ShortcutAction::Record:
+        if (m_record->isEnabled()) {
+            // Qt 6.8 Wayland consumes this token synchronously in requestActivate.
+            // Scope it to this accepted action; ignored commands never publish it.
+            const bool useToken = !activationToken.isEmpty()
+                && QGuiApplication::platformName().startsWith(QStringLiteral("wayland"));
+            const bool hadToken = qEnvironmentVariableIsSet("XDG_ACTIVATION_TOKEN");
+            const auto oldToken = qgetenv("XDG_ACTIVATION_TOKEN");
+            if (useToken) qputenv("XDG_ACTIVATION_TOKEN", activationToken.toUtf8());
+            if (isMinimized()) showNormal();
+            show(); raise(); activateWindow();
+            if (useToken) {
+                if (hadToken) qputenv("XDG_ACTIVATION_TOKEN", oldToken);
+                else qunsetenv("XDG_ACTIVATION_TOKEN");
+            }
+            m_record->click();
+        }
+        break;
+    case ShortcutAction::Pause: m_pause->click(); break;
+    case ShortcutAction::Stop: m_stop->click(); break;
+    }
 }
 
 void MainWindow::updateState(RecorderController::State state) {

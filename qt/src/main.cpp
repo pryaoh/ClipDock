@@ -11,6 +11,7 @@ int main(int argc, char *argv[]) {
     app.setApplicationName(QStringLiteral("ClipDock"));
     app.setApplicationVersion(QStringLiteral("2.0.0"));
     app.setOrganizationName(QStringLiteral("ClipDock"));
+    app.setDesktopFileName(QStringLiteral("io.github.pryaoh.ClipDock"));
     app.setQuitOnLastWindowClosed(true);
     MainWindow window;
     window.show();

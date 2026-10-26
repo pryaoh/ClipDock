@@ -14,6 +14,8 @@ class QCloseEvent;
 class QWidget;
 class WindowPicker;
 class RegionSelection;
+class GlobalShortcuts;
+enum class ShortcutAction;
 
 class MainWindow final : public QMainWindow {
     Q_OBJECT
@@ -31,6 +33,7 @@ private:
     void begin(bool recording);
     void updateState(RecorderController::State state);
     void showError(const QString &message);
+    void dispatchShortcut(ShortcutAction action, const QString &activationToken = QString());
 
     RecorderController m_controller;
     QMediaDevices m_devices;
@@ -56,6 +59,8 @@ private:
     QPushButton *m_reveal = nullptr;
     QLabel *m_status = nullptr;
     QLabel *m_clock = nullptr;
+    GlobalShortcuts *m_shortcuts = nullptr;
+    bool m_selectingOutput = false;
     QLabel *m_stateBadge = nullptr;
     QLabel *m_emptyTitle = nullptr;
     QLabel *m_emptyHint = nullptr;

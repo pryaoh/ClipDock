@@ -1,13 +1,16 @@
 #include "MainWindow.h"
 #include "RegionPicker.h"
+#include "GlobalShortcuts.h"
 #include <QAccessible>
 #include <QApplication>
 #include <QComboBox>
 #include <QFileDialog>
+#include <QDialog>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QScreen>
+#include <QShortcut>
 #include <QStackedWidget>
 #include <QTemporaryDir>
 #include <QVideoWidget>
@@ -26,6 +29,38 @@ public:
         window.m_target->clear();
     }
     static RecorderController &controller(MainWindow &window) { return window.m_controller; }
+    static void checkShortcutGuards(MainWindow &window) {
+        using State = RecorderController::State;
+        int pauses = 0, stops = 0;
+        const auto pauseConnection = QObject::connect(window.m_pause, &QPushButton::clicked, [&] { ++pauses; });
+        const auto stopConnection = QObject::connect(window.m_stop, &QPushButton::clicked, [&] { ++stops; });
+        window.updateState(State::Idle);
+        window.dispatchShortcut(ShortcutAction::Pause);
+        window.dispatchShortcut(ShortcutAction::Stop);
+        check(pauses == 0 && stops == 0, "idle shortcuts cannot pause or stop capture");
+        window.updateState(State::Recording);
+        window.dispatchShortcut(ShortcutAction::Pause);
+        check(pauses == 1, "pause shortcut follows the enabled recording control");
+        QDialog dialog(&window);
+        dialog.setModal(true); dialog.show(); QApplication::processEvents();
+        const auto previousToken = qgetenv("XDG_ACTIVATION_TOKEN");
+        window.dispatchShortcut(ShortcutAction::Record, QStringLiteral("ignored-token"));
+        check(qgetenv("XDG_ACTIVATION_TOKEN") == previousToken, "ignored shortcut does not publish an activation token");
+        window.dispatchShortcut(ShortcutAction::Pause);
+        window.dispatchShortcut(ShortcutAction::Stop);
+        check(pauses == 1 && stops == 0, "modal dialogs block global recording commands");
+        dialog.hide();
+        window.m_selectingOutput = true;
+        window.dispatchShortcut(ShortcutAction::Stop);
+        check(stops == 0, "pending save request blocks shortcut reentry");
+        window.m_selectingOutput = false;
+        window.updateState(State::Stopping);
+        window.dispatchShortcut(ShortcutAction::Pause);
+        window.dispatchShortcut(ShortcutAction::Stop);
+        check(pauses == 1 && stops == 0, "finalization rejects repeated capture commands");
+        QObject::disconnect(pauseConnection); QObject::disconnect(stopConnection);
+        window.updateState(State::Idle);
+    }
     static void checkMultiScreenRegions(MainWindow &window) {
         check(QGuiApplication::screens().size() >= 2, "region integration test needs multiple monitors");
         window.m_sourceType->setCurrentIndex(2);
@@ -90,6 +125,15 @@ public:
         }
     }
     static void checkPresentationStates(MainWindow &window) {
+        int captureShortcuts = 0;
+        for (auto *shortcut : window.findChildren<QShortcut *>()) {
+            if (shortcut->key() != QKeySequence(QStringLiteral("Ctrl+Shift+R"))
+                && shortcut->key() != QKeySequence(QStringLiteral("Ctrl+Shift+P"))
+                && shortcut->key() != QKeySequence(QStringLiteral("Ctrl+Shift+S"))) continue;
+            ++captureShortcuts;
+            check(!shortcut->autoRepeat(), "holding a recording shortcut must not repeatedly dispatch commands");
+        }
+        check(captureShortcuts == 3, "record, pause and stop retain app-local fallback shortcuts");
         using State = RecorderController::State;
         window.show();
         QApplication::processEvents();
@@ -178,6 +222,7 @@ int main(int argc, char **argv) {
             if (!dialog || !dialog->isVisible()) continue;
             dialogTimer.stop();
             dialogVisited = true;
+            MainWindowTestPeer::begin(window); // Must return while the first save dialog is open.
             // Reproduce a hotplug refresh while the save dialog runs its nested event loop.
             MainWindowTestPeer::clearTargets(window);
             dialog->selectFile(directory.filePath(QStringLiteral("snapshot.mp4")));
@@ -192,5 +237,6 @@ int main(int argc, char **argv) {
     check(controller.state() == RecorderController::State::Idle, "cancelled startup is idle");
     MainWindowTestPeer::checkPortalTargets(window);
     MainWindowTestPeer::checkPresentationStates(window);
+    MainWindowTestPeer::checkShortcutGuards(window);
     std::cout << "PASS: save dialog target-list refresh retains selection without stale index access\n";
 }

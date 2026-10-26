@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ClipDock
+Comment=Record your screen, a window or a region
+Exec=ClipDock
+Terminal=false
+Categories=AudioVideo;Recorder;
+StartupNotify=true
