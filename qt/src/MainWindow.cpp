@@ -414,6 +414,15 @@ MainWindow::MainWindow() {
     refreshAudio();
     updateState(RecorderController::State::Idle);
     m_captureReady = true;
+    m_controller.setCaptureExclusionProvider([this] {
+        QList<WId> windows;
+        if (m_excludeSelf->isChecked()) {
+            for (auto *widget : QApplication::topLevelWidgets()) {
+                if (ownedBy(widget, this) && widget->internalWinId()) windows.append(widget->internalWinId());
+            }
+        }
+        return windows;
+    });
     qApp->installEventFilter(this);
 }
 
