@@ -60,7 +60,7 @@ jobs:
             libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
             libxcb-render-util0 libxcb-xinerama0 libxcb-xfixes0 libx11-xcb1 \
             libwayland-dev libwayland-client0 libwayland-cursor0 libwayland-egl1 libpipewire-0.3-0 xvfb xauth patchelf \
-            libx11-dev libxtst-dev dbus-daemon
+            libx11-dev libxtst-dev dbus-daemon openbox xdotool x11-utils
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:

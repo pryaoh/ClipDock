@@ -250,6 +250,36 @@ if(BUILD_TESTING)
         set_tests_properties(portal_global_shortcuts PROPERTIES TIMEOUT 20 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         find_program(CLIPDOCK_XVFB_RUN xvfb-run)
         if(CLIPDOCK_XVFB_RUN)
+            add_executable(x11_capture_tests qt/tests/X11CaptureTests.cpp)
+            target_link_libraries(x11_capture_tests PRIVATE clipdock_capture X11::X11)
+            add_test(NAME x11_capture_native_bounds COMMAND "${CLIPDOCK_XVFB_RUN}" -a
+                -s "-screen 0 1280x800x24" "$<TARGET_FILE:x11_capture_tests>")
+            set_tests_properties(x11_capture_native_bounds PROPERTIES TIMEOUT 20
+                ENVIRONMENT "QT_QPA_PLATFORM=xcb;QT_SCALE_FACTOR=1.25;QT_SCALE_FACTOR_ROUNDING_POLICY=PassThrough")
+            find_program(CLIPDOCK_OPENBOX openbox)
+            find_program(CLIPDOCK_XDOTOOL xdotool)
+            find_program(CLIPDOCK_XMESSAGE xmessage)
+            find_program(CLIPDOCK_XPROP xprop)
+            if(CLIPDOCK_OPENBOX AND CLIPDOCK_XDOTOOL AND CLIPDOCK_XMESSAGE AND CLIPDOCK_XPROP)
+                qt_add_executable(x11_capture_exclusion_tests qt/tests/X11CaptureExclusionTests.cpp
+                    qt/src/MainWindow.cpp qt/src/MainWindow.h qt/src/UiTheme.h
+                    qt/src/RecorderController.cpp qt/src/RecorderController.h
+                    qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp
+                    qt/src/RegionPicker.cpp qt/src/RegionPicker.h
+                    qt/src/WindowPicker.cpp qt/src/WindowPicker.h qt/src/NativeWindowPicker.cpp)
+                target_link_libraries(x11_capture_exclusion_tests PRIVATE
+                    Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts clipdock_capture X11::X11)
+                qt_add_resources(x11_capture_exclusion_tests ui_icons PREFIX /clipdock BASE qt/resources
+                    FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm qt/resources/checkmark.xpm)
+                foreach(mode preview direct region opt-out)
+                    add_test(NAME x11_capture_exclusion_${mode}
+                        COMMAND "${CLIPDOCK_DBUS_RUN_SESSION}" -- "${CLIPDOCK_XVFB_RUN}" -a
+                        -s "-screen 0 1280x800x24" bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test-x11-capture-exclusion.sh"
+                        "$<TARGET_FILE:x11_capture_exclusion_tests>" "--${mode}")
+                    set_tests_properties(x11_capture_exclusion_${mode} PROPERTIES TIMEOUT 90
+                        ENVIRONMENT "QT_QPA_PLATFORM=xcb;QT_MEDIA_BACKEND=ffmpeg;WAYLAND_DISPLAY=;XDG_SESSION_TYPE=x11")
+                endforeach()
+            endif()
             if(X11_XTest_FOUND)
                 qt_add_executable(x11_global_shortcuts_tests qt/tests/X11GlobalShortcutsTests.cpp)
                 target_link_libraries(x11_global_shortcuts_tests PRIVATE clipdock_shortcuts X11::X11 X11::Xtst)
