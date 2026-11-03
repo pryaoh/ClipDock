@@ -42,11 +42,13 @@ brew install cmake ninja
 ./run-macos.command
 ```
 
-`run-macos.command`는 Qt 미디어 플러그인을 확인하고, 필요하면 `aqtinstall`을 통해
+`run-macos.command`와 빌드·테스트 스크립트는 Qt SDK 및 미디어 플러그인을 확인하고, 필요하면 `aqtinstall`을 통해
 공식 Qt 6.8.3 macOS SDK와 Multimedia/Shader Tools를 `.tools/qt/`에 자동 설치합니다.
 최초 설치에는 인터넷 연결과 Python 3가 필요합니다. 설치 도구는 `.tools/qt-installer/`에
 격리되며 기존 Homebrew Qt는 그대로 유지합니다. Qt SDK를 바꾸면 CMake 캐시를 새로 구성해
 서로 다른 Qt 버전이 섞이지 않도록 합니다.
+설치가 중간에 중단되어 일부 파일만 남은 경우에도 다시 설치합니다.
+`QT_ROOT`를 직접 지정한 SDK가 불완전하거나 FFmpeg가 없으면 CMake 실행 전에 원인을 안내합니다.
 
 설치만 별도로 실행하려면 `./scripts/setup-macos-qt.sh`를 사용합니다.
 

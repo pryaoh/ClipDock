@@ -4,6 +4,17 @@
 
 이 문서의 명령과 경로는 저장소 루트를 기준으로 합니다.
 
+## macOS: Qt 설치 중단 또는 빌드 구성 실패
+
+`.tools/qt/`에 폴더가 있다고 설치가 완료된 것은 아닙니다. `qmake`, Qt CMake 구성,
+Multimedia 구성 및 FFmpeg 플러그인을 함께 확인합니다. `./scripts/test-qt.sh`도
+`./run-macos.command`와 같은 빌드 경로를 사용해 필요한 SDK를 설치합니다.
+불완전한 SDK를 `QT_ROOT`로 지정했다면 `unset QT_ROOT` 후 다시 실행하세요.
+
+최신 Qt에서 `Qt6::MultimediaPrivate`를 찾지 못하던 CMake 설정은 별도 private 패키지를
+명시적으로 찾도록 처리했습니다. Homebrew Qt에 FFmpeg 백엔드가 없으면 이 구성 문제가
+해결되어도 화면 녹화는 불가능하므로 공식 Qt SDK를 사용해야 합니다.
+
 ## macOS: 권한 스위치는 켜져 있는데 미리보기가 거부되는 경우
 
 `도움말 → 권한 상태 확인`에서 **현재 프로세스의 화면 기록 허용 여부**, 앱 ID,
@@ -35,3 +46,12 @@ CODE_SIGN_IDENTITY="Apple Development: 이름 (인증서 ID)" ./run-macos.comman
 설정 페이지의 이름에 '시스템 오디오'가 포함되어 있어도, 현재 버전은 시스템 소리
 직접 캡처를 구현하지 않았습니다. 오디오는 선택한 마이크 또는 루프백 입력 장치로만
 녹음하며, 마이크 접근 허용은 별도의 권한입니다.
+
+## macOS: 배포 서명에서 `resource fork, Finder information` 오류
+
+빌드와 패키징은 서명 전에 `com.apple.FinderInfo`와 `com.apple.ResourceFork`만 정리합니다.
+quarantine·provenance 등 다른 확장 속성은 지우지 않습니다.
+Dropbox File Provider가 메타데이터를 즉시 다시 만드는 환경에서는 동기화 폴더 안의 앱을
+서명하는 것만으로 해결되지 않습니다. 패키징 스크립트는 `~/Library/CloudStorage/` 경로를
+감지해 로컬 임시 폴더로 옮겨 패키징하고, 결과를 `dist/ClipDock-macOS.zip`으로 보관합니다.
+ZIP을 동기화 폴더 밖에 풀어서 실행하세요.

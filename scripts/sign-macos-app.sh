@@ -12,6 +12,7 @@ if [[ -z "$BUNDLE_ID" ]]; then
     echo "앱의 CFBundleIdentifier가 없습니다: $APP" >&2
     exit 1
 fi
+bash "$(dirname "$0")/clean-macos-signing-metadata.sh" "$APP"
 
 # Linker-generated ad-hoc signatures seal only the Mach-O executable, not the
 # app bundle or its Info.plist. TCC needs the actual app identity. Keep a valid
