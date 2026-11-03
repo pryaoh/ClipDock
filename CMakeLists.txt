@@ -49,6 +49,29 @@ if(APPLE AND TARGET WrapOpenGL::WrapOpenGL)
     endif()
 endif()
 qt_standard_project_setup()
+add_library(clipdock_capture STATIC qt/src/X11Capture.cpp qt/src/X11Capture.h)
+target_include_directories(clipdock_capture PUBLIC qt/src)
+target_link_libraries(clipdock_capture PUBLIC Qt6::Gui)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_library(CLIPDOCK_XCB_LIBRARY NAMES xcb REQUIRED)
+    target_link_libraries(clipdock_capture PRIVATE "${CLIPDOCK_XCB_LIBRARY}")
+endif()
+add_library(clipdock_shortcuts STATIC qt/src/GlobalShortcuts.cpp qt/src/GlobalShortcuts.h
+    qt/src/ShortcutBackend.h qt/src/NativeGlobalShortcuts.cpp)
+target_include_directories(clipdock_shortcuts PUBLIC qt/src)
+target_link_libraries(clipdock_shortcuts PUBLIC Qt6::Widgets)
+if(MSVC)
+    target_compile_options(clipdock_shortcuts PRIVATE /utf-8)
+    target_link_libraries(clipdock_shortcuts PRIVATE user32)
+elseif(APPLE)
+    target_link_libraries(clipdock_shortcuts PRIVATE "-framework Carbon")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(X11 REQUIRED)
+    find_package(Qt6 REQUIRED COMPONENTS DBus)
+    target_sources(clipdock_shortcuts PRIVATE qt/src/PortalGlobalShortcuts.cpp qt/src/PortalGlobalShortcuts.h)
+    target_compile_definitions(clipdock_shortcuts PRIVATE CLIPDOCK_HAS_X11 CLIPDOCK_HAS_PORTAL)
+    target_link_libraries(clipdock_shortcuts PRIVATE X11::X11 PUBLIC Qt6::DBus)
+endif()
 qt_add_executable(ClipDock WIN32 MACOSX_BUNDLE
     qt/src/main.cpp
     qt/src/MainWindow.cpp qt/src/MainWindow.h qt/src/UiTheme.h
@@ -59,9 +82,9 @@ qt_add_executable(ClipDock WIN32 MACOSX_BUNDLE
     qt/src/NativeWindowPicker.cpp qt/src/NativeWindowPicker.h
     qt/src/RegionPicker.cpp qt/src/RegionPicker.h qt/src/RegionCapture.h
 )
-target_link_libraries(ClipDock PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets)
+target_link_libraries(ClipDock PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts clipdock_capture)
 qt_add_resources(ClipDock ui_icons PREFIX /clipdock BASE qt/resources
-    FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm)
+    FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm qt/resources/checkmark.xpm)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Qt marks Wayland platform plugins as non-default, so deployment otherwise
     # includes only XCB. The module also supplies shell/decoration integrations.
@@ -99,6 +122,27 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    qt_add_executable(global_shortcuts_tests qt/tests/GlobalShortcutsTests.cpp)
+    target_link_libraries(global_shortcuts_tests PRIVATE clipdock_shortcuts)
+    if(MSVC)
+        target_compile_options(global_shortcuts_tests PRIVATE /utf-8)
+    endif()
+    add_test(NAME global_shortcuts COMMAND global_shortcuts_tests)
+    set_tests_properties(global_shortcuts PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    if(APPLE)
+        add_executable(mac_shortcut_keys_tests qt/tests/MacShortcutKeysTests.cpp)
+        target_include_directories(mac_shortcut_keys_tests PRIVATE qt/src)
+        target_link_libraries(mac_shortcut_keys_tests PRIVATE "-framework Carbon")
+        add_test(NAME mac_shortcut_keys COMMAND mac_shortcut_keys_tests)
+        set_tests_properties(mac_shortcut_keys PROPERTIES TIMEOUT 15)
+    endif()
+    if(WIN32)
+        qt_add_executable(native_global_shortcuts_tests qt/tests/NativeGlobalShortcutsTests.cpp)
+        target_link_libraries(native_global_shortcuts_tests PRIVATE clipdock_shortcuts user32)
+        target_compile_options(native_global_shortcuts_tests PRIVATE /utf-8)
+        add_test(NAME native_global_shortcuts COMMAND native_global_shortcuts_tests)
+        set_tests_properties(native_global_shortcuts PROPERTIES TIMEOUT 15)
+    endif()
     qt_add_executable(region_picker_tests qt/tests/RegionPickerTests.cpp qt/src/RegionPicker.cpp qt/src/RegionPicker.h)
     target_include_directories(region_picker_tests PRIVATE qt/src)
     target_link_libraries(region_picker_tests PRIVATE Qt6::Widgets)
@@ -116,7 +160,7 @@ if(BUILD_TESTING)
     qt_add_executable(region_recording_tests qt/tests/RegionRecordingTests.cpp
         qt/src/RecorderController.cpp qt/src/RecorderController.h qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp)
     target_include_directories(region_recording_tests PRIVATE qt/src)
-    target_link_libraries(region_recording_tests PRIVATE Qt6::Gui Qt6::Multimedia)
+    target_link_libraries(region_recording_tests PRIVATE Qt6::Gui Qt6::Multimedia clipdock_capture)
     if(APPLE)
         target_link_libraries(region_recording_tests PRIVATE "-framework CoreGraphics")
     elseif(MSVC)
@@ -129,14 +173,15 @@ if(BUILD_TESTING)
     add_test(NAME recording_fps30_static COMMAND region_recording_tests --fps-check --static-source)
     add_test(NAME recording_fps60 COMMAND region_recording_tests --fps-check --fps60)
     add_test(NAME recording_fps25_full_frame COMMAND region_recording_tests --fps-check --full-frame)
+    add_test(NAME recording_protected_source COMMAND region_recording_tests --protected-source)
     set_tests_properties(region_recording recording_capture_failure recording_delayed_permission
-        recording_fps25 recording_fps30_static recording_fps60 recording_fps25_full_frame
+        recording_fps25 recording_fps30_static recording_fps60 recording_fps25_full_frame recording_protected_source
         PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_MEDIA_BACKEND=ffmpeg")
 
     qt_add_executable(recorder_lifecycle_tests qt/tests/RecorderLifecycleTests.cpp
         qt/src/RecorderController.cpp qt/src/RecorderController.h qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp)
     target_include_directories(recorder_lifecycle_tests PRIVATE qt/src)
-    target_link_libraries(recorder_lifecycle_tests PRIVATE Qt6::Gui Qt6::Multimedia)
+    target_link_libraries(recorder_lifecycle_tests PRIVATE Qt6::Gui Qt6::Multimedia clipdock_capture)
     if(APPLE)
         target_link_libraries(recorder_lifecycle_tests PRIVATE "-framework CoreGraphics")
     elseif(MSVC)
@@ -168,9 +213,9 @@ if(BUILD_TESTING)
         qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp qt/src/RegionPicker.cpp qt/src/RegionPicker.h
         qt/src/WindowPicker.cpp qt/src/WindowPicker.h qt/src/NativeWindowPicker.cpp)
     target_include_directories(main_window_tests PRIVATE qt/src)
-    target_link_libraries(main_window_tests PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets)
+    target_link_libraries(main_window_tests PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts clipdock_capture)
     qt_add_resources(main_window_tests ui_icons PREFIX /clipdock BASE qt/resources
-        FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm)
+        FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm qt/resources/checkmark.xpm)
     if(APPLE OR WIN32)
         target_link_libraries(main_window_tests PRIVATE Qt6::MultimediaPrivate)
     endif()
@@ -183,7 +228,15 @@ if(BUILD_TESTING)
         target_compile_options(main_window_tests PRIVATE /utf-8)
     endif()
     add_test(NAME main_window COMMAND main_window_tests)
-    set_tests_properties(main_window PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    set_tests_properties(main_window PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME main_window_startup_policy COMMAND main_window_tests --startup-policy)
+    add_test(NAME main_window_move_into_capture COMMAND main_window_tests --move-into-capture)
+    set_tests_properties(main_window_startup_policy main_window_move_into_capture
+        PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    if(WIN32)
+        add_test(NAME main_window_capture_affinity COMMAND main_window_tests --capture-affinity)
+        set_tests_properties(main_window_capture_affinity PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=windows")
+    endif()
     add_test(NAME main_window_multiple_screens COMMAND main_window_tests --multi-screen
         -platform "offscreen:configfile=qt/tests/fixtures/multiple-screens.json")
     set_tests_properties(main_window_multiple_screens PROPERTIES TIMEOUT 15
@@ -201,8 +254,50 @@ if(BUILD_TESTING)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_MEDIA_BACKEND=ffmpeg")
 
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_program(CLIPDOCK_DBUS_RUN_SESSION dbus-run-session REQUIRED)
+        qt_add_executable(portal_global_shortcuts_tests qt/tests/PortalGlobalShortcutsTests.cpp)
+        target_link_libraries(portal_global_shortcuts_tests PRIVATE clipdock_shortcuts)
+        add_test(NAME portal_global_shortcuts COMMAND "${CLIPDOCK_DBUS_RUN_SESSION}" -- "$<TARGET_FILE:portal_global_shortcuts_tests>")
+        set_tests_properties(portal_global_shortcuts PROPERTIES TIMEOUT 20 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         find_program(CLIPDOCK_XVFB_RUN xvfb-run)
         if(CLIPDOCK_XVFB_RUN)
+            add_executable(x11_capture_tests qt/tests/X11CaptureTests.cpp)
+            target_link_libraries(x11_capture_tests PRIVATE clipdock_capture X11::X11)
+            add_test(NAME x11_capture_native_bounds COMMAND "${CLIPDOCK_XVFB_RUN}" -a
+                -s "-screen 0 1280x800x24" "$<TARGET_FILE:x11_capture_tests>")
+            set_tests_properties(x11_capture_native_bounds PROPERTIES TIMEOUT 20
+                ENVIRONMENT "QT_QPA_PLATFORM=xcb;QT_SCALE_FACTOR=1.25;QT_SCALE_FACTOR_ROUNDING_POLICY=PassThrough")
+            find_program(CLIPDOCK_OPENBOX openbox)
+            find_program(CLIPDOCK_XDOTOOL xdotool)
+            find_program(CLIPDOCK_XMESSAGE xmessage)
+            find_program(CLIPDOCK_XPROP xprop)
+            if(CLIPDOCK_OPENBOX AND CLIPDOCK_XDOTOOL AND CLIPDOCK_XMESSAGE AND CLIPDOCK_XPROP)
+                qt_add_executable(x11_capture_exclusion_tests qt/tests/X11CaptureExclusionTests.cpp
+                    qt/src/MainWindow.cpp qt/src/MainWindow.h qt/src/UiTheme.h
+                    qt/src/RecorderController.cpp qt/src/RecorderController.h
+                    qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp
+                    qt/src/RegionPicker.cpp qt/src/RegionPicker.h
+                    qt/src/WindowPicker.cpp qt/src/WindowPicker.h qt/src/NativeWindowPicker.cpp)
+                target_link_libraries(x11_capture_exclusion_tests PRIVATE
+                    Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts clipdock_capture X11::X11)
+                qt_add_resources(x11_capture_exclusion_tests ui_icons PREFIX /clipdock BASE qt/resources
+                    FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm qt/resources/checkmark.xpm)
+                foreach(mode preview direct region opt-out)
+                    add_test(NAME x11_capture_exclusion_${mode}
+                        COMMAND "${CLIPDOCK_DBUS_RUN_SESSION}" -- "${CLIPDOCK_XVFB_RUN}" -a
+                        -s "-screen 0 1280x800x24" bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test-x11-capture-exclusion.sh"
+                        "$<TARGET_FILE:x11_capture_exclusion_tests>" "--${mode}")
+                    set_tests_properties(x11_capture_exclusion_${mode} PROPERTIES TIMEOUT 90
+                        ENVIRONMENT "QT_QPA_PLATFORM=xcb;QT_MEDIA_BACKEND=ffmpeg;WAYLAND_DISPLAY=;XDG_SESSION_TYPE=x11")
+                endforeach()
+            endif()
+            if(X11_XTest_FOUND)
+                qt_add_executable(x11_global_shortcuts_tests qt/tests/X11GlobalShortcutsTests.cpp)
+                target_link_libraries(x11_global_shortcuts_tests PRIVATE clipdock_shortcuts X11::X11 X11::Xtst)
+                add_test(NAME x11_global_shortcuts COMMAND "${CLIPDOCK_XVFB_RUN}" -a "$<TARGET_FILE:x11_global_shortcuts_tests>")
+                set_tests_properties(x11_global_shortcuts PROPERTIES TIMEOUT 15
+                    ENVIRONMENT "QT_QPA_PLATFORM=xcb;WAYLAND_DISPLAY=;XDG_SESSION_TYPE=x11")
+            endif()
             qt_add_executable(linux_screen_capture_tests qt/tests/LinuxScreenCaptureTests.cpp)
             target_link_libraries(linux_screen_capture_tests PRIVATE Qt6::Widgets Qt6::Multimedia)
             add_test(NAME linux_screen_capture COMMAND "${CLIPDOCK_XVFB_RUN}" -a
@@ -216,6 +311,8 @@ endif()
 include(GNUInstallDirs)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set_target_properties(ClipDock PROPERTIES INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+    install(FILES qt/platform/linux/io.github.pryaoh.ClipDock.desktop
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
 endif()
 if(MSVC)
     # windeployqt supplies the redistributable installer, not app-local CRT DLLs.

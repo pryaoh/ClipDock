@@ -99,6 +99,14 @@ inline void applyLightTheme(QWidget *window) {
     window->setStyleSheet(QStringLiteral(R"(
         QMainWindow, QWidget#appSurface { background: #f4f6fa; }
         QLabel { color: #24324a; font-size: 13px; background: transparent; }
+        QCheckBox { color: #24324a; font-size: 12px; spacing: 8px; }
+        QCheckBox:disabled { color: #9aa5b5; }
+        QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #aab7ca;
+            border-radius: 3px; background: white; }
+        QCheckBox::indicator:checked { border-color: #2563eb; background: #2563eb;
+            image: url(:/clipdock/checkmark.xpm); }
+        QCheckBox::indicator:disabled { border-color: #cbd4e1; background: #edf2f8; }
+        QCheckBox::indicator:checked:disabled { background: #9aa5b5; }
         QLabel#appTitle { font-size: 26px; font-weight: 700; }
         QLabel#subtitle, QLabel#fieldLabel { color: #68778d; font-size: 12px; }
         QLabel#brandIcon { background: #2563eb; border-radius: 12px; }

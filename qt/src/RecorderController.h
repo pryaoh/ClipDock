@@ -16,7 +16,9 @@
 #include <QVideoSink>
 #include <QElapsedTimer>
 #include <QWindowCapture>
+#include <QtGui/qwindowdefs.h>
 #include <memory>
+#include <functional>
 
 class QScreen;
 class QVideoSink;
@@ -41,13 +43,16 @@ public:
     explicit RecorderController(QObject *parent = nullptr);
     ~RecorderController() override;
     void setVideoSink(QVideoSink *sink);
+    void setCaptureExclusionProvider(std::function<QList<WId>()> provider);
     State state() const { return m_state; }
+    const Target &target() const { return m_target; }
     void start(const Target &target, const RecordingOptions &options, const QAudioDevice &audio,
                QMediaFormat::VideoCodec codec, const QString &outputPath = {});
     void togglePause();
     void stop();
 
 signals:
+    void recordingAboutToStart(); // Permissions, first frame and output preparation are complete.
     void stateChanged(State state);
     void durationChanged(qint64 milliseconds);
     void statusChanged(const QString &message);
@@ -63,6 +68,8 @@ private:
     void handleFrame(const QVideoFrame &frame);
     void handleCapturedFrame(const QVideoFrame &frame);
     void sendScheduledFrame();
+    void sendInputFrame(QVideoFrame frame);
+    void captureProtectedFrame();
     void handleRecorderState(QMediaRecorder::RecorderState state);
     void fail(const QString &message, bool recorderError = false);
     void finish();
@@ -85,6 +92,10 @@ private:
     QWindowCapture m_window;
     QAudioInput m_audio;
     QTimer m_startTimeout;
+    QTimer m_protectedCaptureTimer;
+    std::function<QList<WId>()> m_excludedWindows;
+    bool m_protectedCapture = false;
+    bool m_protectedNeedsSync = true;
     QPointer<QVideoSink> m_sink;
     std::unique_ptr<QTemporaryFile> m_temporary;
     State m_state = State::Idle;

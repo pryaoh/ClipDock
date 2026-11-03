@@ -3,9 +3,12 @@
 #include "WindowPicker.h"
 #include "RegionPicker.h"
 #include "UiTheme.h"
+#include "GlobalShortcuts.h"
 #include <QApplication>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QCheckBox>
+#include <QSettings>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
@@ -19,6 +22,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScreen>
+#include <QScopedValueRollback>
 #include <QScrollArea>
 #include <QShortcut>
 #include <QSpinBox>
@@ -27,7 +31,29 @@
 #include <QStyle>
 #include <QVBoxLayout>
 #include <QVideoWidget>
+#include <QOperatingSystemVersion>
 #include <utility>
+#ifdef Q_OS_WIN
+#include <qt_windows.h>
+#endif
+
+namespace {
+bool ownedBy(const QObject *object, const QObject *owner) {
+    for (auto *current = object; current; current = current->parent())
+        if (current == owner) return true;
+    return false;
+}
+
+bool supportsCaptureExclusion() {
+#ifdef Q_OS_WIN
+    return QGuiApplication::platformName() == QStringLiteral("windows")
+        && QOperatingSystemVersion::current()
+            >= QOperatingSystemVersion(QOperatingSystemVersion::Windows, 10, 0, 19041);
+#else
+    return false;
+#endif
+}
+}
 
 MainWindow::MainWindow() {
     setWindowTitle(QStringLiteral("ClipDock"));
@@ -120,7 +146,9 @@ MainWindow::MainWindow() {
     m_video->setAspectRatioMode(Qt::KeepAspectRatio);
     m_previewStack->addWidget(m_video);
     previewLayout->addWidget(m_previewStack, 1);
-    previewLayout->addWidget(label(QStringLiteral("원본 비율을 유지하여 미리보기와 영상을 저장합니다."), "previewCaption"));
+    m_captureHint = label(QStringLiteral("화면·영역 녹화 시 ClipDock를 최소화하거나 녹화 영역 밖으로 옮기세요."), "previewCaption");
+    m_captureHint->setWordWrap(true);
+    previewLayout->addWidget(m_captureHint);
     m_controller.setVideoSink(m_video->videoSink());
     body->addWidget(previewCard, 1);
 
@@ -219,6 +247,26 @@ MainWindow::MainWindow() {
         : QStringLiteral("시스템 소리를 담으려면 별도의 루프백 입력 장치를 선택하세요."), "hint");
     hint->setWordWrap(true);
     form->addWidget(hint);
+    form->addWidget(separator());
+    QSettings preferences;
+    m_excludeSelf = new QCheckBox(QStringLiteral("ClipDock 창을 녹화에서 제외"));
+    m_excludeSelf->setObjectName(QStringLiteral("excludeSelfCheckBox"));
+    m_excludeSelf->setChecked(preferences.value(QStringLiteral("capture/excludeSelf"), true).toBool());
+    m_excludeSelf->setToolTip(QStringLiteral("지원 환경에서는 미리보기·녹화 중 ClipDock 창을 캡처에서 제외합니다.\n미지원 환경에서는 녹화 영역과 겹칠 때 최소화합니다."));
+    form->addWidget(m_excludeSelf);
+    m_minimizeRecording = new QCheckBox(QStringLiteral("녹화 시작 시 최소화"));
+    m_minimizeRecording->setObjectName(QStringLiteral("minimizeRecordingCheckBox"));
+    m_minimizeRecording->setChecked(preferences.value(QStringLiteral("capture/minimizeRecording"), false).toBool());
+    m_minimizeRecording->setToolTip(QStringLiteral("미리보기 창은 유지하고, 녹화를 시작할 때만 최소화합니다.\n중지 후에는 원래 창 상태로 돌아옵니다."));
+    form->addWidget(m_minimizeRecording);
+    connect(m_excludeSelf, &QCheckBox::toggled, this, [this](bool checked) {
+        QSettings().setValue(QStringLiteral("capture/excludeSelf"), checked);
+        applyCaptureExclusion();
+        updatePreview();
+    });
+    connect(m_minimizeRecording, &QCheckBox::toggled, this, [](bool checked) {
+        QSettings().setValue(QStringLiteral("capture/minimizeRecording"), checked);
+    });
     form->addStretch();
     scroll->setWidget(settings);
     settingsLayout->addWidget(scroll, 1);
@@ -255,11 +303,16 @@ MainWindow::MainWindow() {
     m_status = label(QStringLiteral("녹화 대상을 선택하세요."), "statusText");
     m_status->setWordWrap(true);
     m_status->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    controlLayout->addWidget(m_status);
+    auto *statusRow = new QHBoxLayout;
+    statusRow->addWidget(m_status, 1);
+    auto *shortcutStatus = label({}, "shortcutStatus");
+    statusRow->addWidget(shortcutStatus);
+    controlLayout->addLayout(statusRow);
     layout->addWidget(controls);
     setCentralWidget(central);
     const QList<QWidget *> focusOrder = {m_sourceType, m_target, m_pickWindow, m_pickRegion, refresh,
-        m_resolution, m_fps, m_bitrate, m_codec, m_audio, m_preview, m_record, m_pause, m_stop, m_reveal};
+        m_resolution, m_fps, m_bitrate, m_codec, m_audio, m_excludeSelf, m_minimizeRecording,
+        m_preview, m_record, m_pause, m_stop, m_reveal};
     for (qsizetype i = 1; i < focusOrder.size(); ++i)
         QWidget::setTabOrder(focusOrder[i - 1], focusOrder[i]);
 
@@ -287,9 +340,9 @@ MainWindow::MainWindow() {
         QMessageBox::information(this, QStringLiteral("ClipDock"),
             QStringLiteral("화면/창 선택 → 미리보기 또는 녹화 시작 → 중지 및 저장\n\n"
                            "창 모드의 '클릭으로 선택': 원하는 창을 클릭하세요. Esc/오른쪽 클릭으로 취소합니다.\n\n"
-                           "영역 모드: 모니터 선택 → 영역 지정 → 드래그 → 미리보기 또는 녹화 시작.\n"
+                           "영역 모드: 영역 지정 → 원하는 모니터에서 드래그 → 미리보기 또는 녹화 시작.\n"
                            "한 모니터 안에서 16 × 16 이상으로 선택하세요. 영역 안에 겹친 창도 녹화됩니다.\n\n"
-                           "단축키 (앱에 포커스가 있을 때):\n"
+                           "단축키 (전역 등록 상태는 도움말 → 단축키 상태에서 확인):\n"
                            "Ctrl/⌘+Shift+R 녹화 · Ctrl/⌘+Shift+P 일시정지 · Ctrl/⌘+Shift+S 중지\n\n"
                            "macOS: 화면 기록 권한을 허용한 뒤 재실행하세요.\n"
                            "Linux X11: 화면·창 목록 또는 영역 지정을 사용하세요.\n"
@@ -317,12 +370,20 @@ MainWindow::MainWindow() {
     });
     connect(m_record, &QPushButton::clicked, this, [this] { begin(true); });
     connect(m_preview, &QPushButton::clicked, this, [this] { begin(false); });
-    connect(m_pause, &QPushButton::clicked, &m_controller, &RecorderController::togglePause);
+    connect(m_pause, &QPushButton::clicked, this, [this] {
+        if (m_captureState == RecorderController::State::Paused && needsFallbackMinimize())
+            minimizeForRecording();
+        m_controller.togglePause();
+    });
     connect(m_stop, &QPushButton::clicked, &m_controller, &RecorderController::stop);
     connect(m_reveal, &QPushButton::clicked, this, [this] {
         QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(m_lastFile).absolutePath()));
     });
     connect(&m_controller, &RecorderController::stateChanged, this, &MainWindow::updateState);
+    connect(&m_controller, &RecorderController::recordingAboutToStart, this, [this] {
+        applyCaptureExclusion();
+        if (m_minimizeRecording->isChecked() || needsFallbackMinimize()) minimizeForRecording();
+    });
     connect(&m_controller, &RecorderController::statusChanged, m_status, &QLabel::setText);
     connect(&m_controller, &RecorderController::errorOccurred, this, &MainWindow::showError, Qt::QueuedConnection);
     connect(&m_controller, &RecorderController::saved, this, [this](const QString &path) {
@@ -334,15 +395,35 @@ MainWindow::MainWindow() {
         m_clock->setText(QStringLiteral("%1:%2:%3").arg(seconds / 3600, 2, 10, QLatin1Char('0'))
             .arg(seconds / 60 % 60, 2, 10, QLatin1Char('0')).arg(seconds % 60, 2, 10, QLatin1Char('0')));
     });
-    auto *recordShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+R")), this);
-    connect(recordShortcut, &QShortcut::activated, this, [this] { if (m_record->isEnabled()) begin(true); });
-    auto *pauseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+P")), this);
-    connect(pauseShortcut, &QShortcut::activated, &m_controller, &RecorderController::togglePause);
-    auto *stopShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+S")), this);
-    connect(stopShortcut, &QShortcut::activated, &m_controller, &RecorderController::stop);
+    m_shortcuts = new GlobalShortcuts(this);
+    connect(m_shortcuts, &GlobalShortcuts::activated, this, &MainWindow::dispatchShortcut);
+    connect(m_shortcuts, &GlobalShortcuts::statusChanged, this, [this, shortcutStatus] {
+        shortcutStatus->setText(QStringLiteral("전역 단축키 %1/3").arg(m_shortcuts->registeredCount()));
+        shortcutStatus->setToolTip(m_shortcuts->description());
+        shortcutStatus->setAccessibleDescription(m_shortcuts->description());
+    });
+    connect(help->addAction(QStringLiteral("단축키 상태")), &QAction::triggered, this, [this] {
+        QMessageBox::information(this, QStringLiteral("단축키 상태"), m_shortcuts->description()
+            + QStringLiteral("\n\n전역 등록에 실패한 키는 앱에 포커스가 있을 때 사용할 수 있습니다.\n"
+                             "충돌하는 앱의 설정을 변경한 뒤 '전역 단축키 다시 등록'을 선택하세요."));
+    });
+    connect(help->addAction(QStringLiteral("전역 단축키 다시 등록")), &QAction::triggered,
+            m_shortcuts, &GlobalShortcuts::retry);
+    m_shortcuts->retry();
     refreshTargets();
     refreshAudio();
     updateState(RecorderController::State::Idle);
+    m_captureReady = true;
+    m_controller.setCaptureExclusionProvider([this] {
+        QList<WId> windows;
+        if (m_excludeSelf->isChecked()) {
+            for (auto *widget : QApplication::topLevelWidgets()) {
+                if (ownedBy(widget, this) && widget->internalWinId()) windows.append(widget->internalWinId());
+            }
+        }
+        return windows;
+    });
+    qApp->installEventFilter(this);
 }
 
 void MainWindow::refreshTargets() {
@@ -499,6 +580,10 @@ void MainWindow::refreshAudio() {
 }
 
 void MainWindow::begin(bool recording) {
+    if (m_selectingOutput || m_closing || m_picker || m_regionPicker
+        || (m_controller.state() != RecorderController::State::Idle
+            && m_controller.state() != RecorderController::State::Preview)) return;
+    QScopedValueRollback<bool> selecting(m_selectingOutput, true);
     const int target = m_target->currentIndex();
     if (target < 0 || target >= m_targets.size()) return;
     // A modal file dialog still processes screen removal and target-list refresh events.
@@ -527,8 +612,47 @@ void MainWindow::begin(bool recording) {
         static_cast<QMediaFormat::VideoCodec>(m_codec->currentData().toInt()), outputPath);
 }
 
+void MainWindow::dispatchShortcut(ShortcutAction action, const QString &activationToken) {
+    if (m_selectingOutput || m_closing || m_picker || m_regionPicker
+        || QApplication::activeModalWidget()) return;
+    switch (action) {
+    case ShortcutAction::Record:
+        if (m_record->isEnabled()) {
+            // Qt 6.8 Wayland consumes this token synchronously in requestActivate.
+            // Scope it to this accepted action; ignored commands never publish it.
+            const bool useToken = !activationToken.isEmpty()
+                && QGuiApplication::platformName().startsWith(QStringLiteral("wayland"));
+            const bool hadToken = qEnvironmentVariableIsSet("XDG_ACTIVATION_TOKEN");
+            const auto oldToken = qgetenv("XDG_ACTIVATION_TOKEN");
+            if (useToken) qputenv("XDG_ACTIVATION_TOKEN", activationToken.toUtf8());
+            if (isMinimized()) showNormal();
+            show(); raise(); activateWindow();
+            if (useToken) {
+                if (hadToken) qputenv("XDG_ACTIVATION_TOKEN", oldToken);
+                else qunsetenv("XDG_ACTIVATION_TOKEN");
+            }
+            m_record->click();
+        }
+        break;
+    case ShortcutAction::Pause: m_pause->click(); break;
+    case ShortcutAction::Stop: m_stop->click(); break;
+    }
+}
+
 void MainWindow::updateState(RecorderController::State state) {
     using State = RecorderController::State;
+    m_captureState = state;
+    if (state != State::Recording) m_fallbackPausePending = false;
+    applyCaptureExclusion();
+    if (state == State::Recording && needsFallbackMinimize())
+        minimizeForRecording();
+    if (state == State::Idle && m_autoMinimized) {
+        m_autoMinimized = false;
+        if (isMinimized() && !m_closing) {
+            if (m_restoreMaximized) showMaximized();
+            else showNormal();
+        }
+    }
     const bool idle = state == State::Idle;
     const bool preview = state == State::Preview;
     const int index = m_target->currentIndex();
@@ -560,8 +684,7 @@ void MainWindow::updateState(RecorderController::State state) {
         m_stateBadge->style()->unpolish(m_stateBadge);
         m_stateBadge->style()->polish(m_stateBadge);
     }
-    const bool showVideo = preview || state == State::Recording || state == State::Paused || state == State::Stopping;
-    m_previewStack->setCurrentIndex(showVideo ? 1 : 0);
+    updatePreview();
     if (state == State::WaitingForPermission) {
         m_emptyTitle->setText(QStringLiteral("화면 공유를 기다리고 있어요"));
         m_emptyHint->setText(QStringLiteral("권한 요청이나 시스템 공유 창을 확인하세요.\n중지 버튼으로 취소할 수 있습니다."));
@@ -578,6 +701,98 @@ void MainWindow::updateState(RecorderController::State state) {
 void MainWindow::showError(const QString &message) {
     m_closing = false;
     QMessageBox::warning(this, QStringLiteral("ClipDock"), message);
+}
+
+bool MainWindow::event(QEvent *event) {
+    const bool result = QMainWindow::event(event);
+    if (m_captureReady && (event->type() == QEvent::Move || event->type() == QEvent::Resize
+        || event->type() == QEvent::Show || event->type() == QEvent::WindowStateChange)) {
+        updatePreview();
+        if (event->type() == QEvent::WindowStateChange && !isMinimized())
+            m_autoMinimized = false; // The user restored it; don't override their next choice.
+        if (m_captureState == RecorderController::State::Recording && !m_fallbackPausePending) {
+            // Qt may deliver state changes before the restored window becomes visible.
+            // Check after the event sequence, and coalesce movement/resize/show notifications.
+            m_fallbackPausePending = true;
+            QTimer::singleShot(0, this, [this] {
+                updatePreview();
+                if (m_captureState == RecorderController::State::Recording && needsFallbackMinimize()) {
+                    m_pause->click();
+                    m_status->setText(QStringLiteral("ClipDock 창이 녹화 영역에 겹쳐 일시정지했습니다. 재개하면 다시 최소화합니다."));
+                } else m_fallbackPausePending = false;
+            });
+        }
+    }
+    return result;
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
+    if (m_captureReady && (event->type() == QEvent::Show || event->type() == QEvent::WinIdChange)) {
+        auto *widget = qobject_cast<QWidget *>(watched);
+        if (widget && widget->isWindow() && ownedBy(widget, this)) {
+            applyCaptureExclusion();
+            updatePreview();
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::applyCaptureExclusion() {
+    m_captureExcluded = false;
+#ifdef Q_OS_WIN
+    if (!m_excludeSelf || QGuiApplication::platformName() != QStringLiteral("windows")) return;
+    const bool exclude = m_captureState != RecorderController::State::Idle
+        && m_excludeSelf->isChecked() && supportsCaptureExclusion();
+    for (auto *widget : QApplication::topLevelWidgets()) {
+        if (!ownedBy(widget, this) || !widget->internalWinId()) continue;
+        // Never create a native window here: creation itself delivers WinIdChange.
+        const bool applied = SetWindowDisplayAffinity(reinterpret_cast<HWND>(widget->internalWinId()),
+                                                       exclude ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+        if (widget == this) m_captureExcluded = exclude && applied;
+    }
+#endif
+}
+
+bool MainWindow::overlapsCapture() const {
+    if (!isVisible() || isMinimized()) return false;
+    const auto &target = m_controller.target();
+    if (target.isWindow) return false;
+    if (target.isPortal || !target.screen) return true;
+    const auto bounds = target.isRegion ? target.region.translated(target.screen->geometry().topLeft())
+                                        : target.screen->geometry();
+    return frameGeometry().intersects(bounds);
+}
+
+bool MainWindow::needsFallbackMinimize() const {
+    return m_excludeSelf->isChecked() && !m_captureExcluded && overlapsCapture();
+}
+
+void MainWindow::minimizeForRecording() {
+    if (isMinimized()) return;
+    m_restoreMaximized = isMaximized();
+    m_autoMinimized = true;
+    showMinimized(); // Retain a taskbar/Dock entry even if global shortcuts fail.
+}
+
+void MainWindow::updatePreview() {
+    using State = RecorderController::State;
+    const bool live = m_captureState == State::Preview || m_captureState == State::Recording
+        || m_captureState == State::Paused || m_captureState == State::Stopping;
+    const bool feedback = live && !m_captureExcluded && overlapsCapture();
+    m_previewStack->setCurrentIndex(live && !feedback ? 1 : 0);
+    if (feedback) {
+        m_emptyTitle->setText(QStringLiteral("미리보기 중첩을 방지하고 있어요"));
+        m_emptyHint->setText(QStringLiteral("ClipDock 창이 캡처 대상과 겹쳐 미리보기를 숨겼습니다.\n창을 녹화 영역 밖으로 옮기면 다시 표시됩니다.\n이 안내 화면도 녹화에 포함될 수 있습니다."));
+    }
+    if (m_captureExcluded) {
+        m_captureHint->setText(QStringLiteral("ClipDock 창은 미리보기와 녹화에서 제외됩니다."));
+    } else if (!m_excludeSelf->isChecked()) {
+        m_captureHint->setText(QStringLiteral("창 제외가 꺼져 있습니다. 녹화 영역 안의 ClipDock 창도 영상에 포함됩니다."));
+    } else if (m_captureState == State::Idle && supportsCaptureExclusion()) {
+        m_captureHint->setText(QStringLiteral("미리보기·녹화 중 ClipDock 창을 캡처에서 제외합니다."));
+    } else {
+        m_captureHint->setText(QStringLiteral("창 제외를 사용할 수 없어 녹화 영역과 겹치면 최소화합니다. 작업 표시줄에서 다시 열어 일시정지·중지할 수 있습니다."));
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
