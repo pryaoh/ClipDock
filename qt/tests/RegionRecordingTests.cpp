@@ -14,13 +14,13 @@ public:
     static void preview(RecorderController &controller, const RecorderController::Target &target) {
         controller.m_target = target;
         controller.m_options.fps = 25;
-        controller.m_regionThrottle.invalidate();
-        controller.m_session.setVideoSink(nullptr);
-        controller.m_session.setVideoFrameInput(&controller.m_regionInput);
         controller.setState(RecorderController::State::Starting);
     }
     static void frame(RecorderController &controller, const QImage &image) {
-        controller.handleRegionFrame(QVideoFrame(image));
+        controller.m_captureSink.setVideoFrame(QVideoFrame(image));
+    }
+    static void observeSubmittedFrames(RecorderController &controller, QVideoSink *sink) {
+        controller.m_session.setVideoSink(sink);
     }
     static void captureFailure(RecorderController &controller) {
         controller.fail(QStringLiteral("injected capture interruption"));
@@ -41,6 +41,11 @@ int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     const bool captureFailure = app.arguments().contains(QStringLiteral("--capture-failure"));
     const bool delayedPermission = app.arguments().contains(QStringLiteral("--delayed-permission"));
+    const bool fpsCheck = app.arguments().contains(QStringLiteral("--fps-check"));
+    const bool staticSource = app.arguments().contains(QStringLiteral("--static-source"));
+    const bool fullFrame = app.arguments().contains(QStringLiteral("--full-frame"));
+    const int fps = app.arguments().contains(QStringLiteral("--fps60")) ? 60
+        : (staticSource ? 30 : 25);
     QTemporaryDir directory;
     if (!directory.isValid()) return 1;
     RecorderController controller;
@@ -48,7 +53,7 @@ int main(int argc, char **argv) {
     controller.setVideoSink(&preview);
     RecorderController::Target target;
     target.screen = app.primaryScreen();
-    target.isRegion = true;
+    target.isRegion = !fullFrame;
     target.regionScreenSize = target.screen->size();
     target.region = QRect(20, 30, 160, 90);
     QImage desktop(target.regionScreenSize * 2, QImage::Format_ARGB32);
@@ -56,10 +61,29 @@ int main(int argc, char **argv) {
     QPainter painter(&desktop);
     painter.fillRect(QRect(40, 60, 320, 180), QColor(0, 220, 0));
     painter.end();
+    if (fullFrame) {
+        desktop = QImage(320, 180, QImage::Format_ARGB32);
+        desktop.fill(QColor(0, 220, 0));
+    }
     auto fail = [&](const QString &message) {
         std::cerr << "FAIL: " << message.toStdString() << '\n';
         app.exit(1);
     };
+    QVideoSink submitted;
+    QList<std::pair<QVideoFrame, qint64>> retained;
+    if (fpsCheck) {
+        RecorderControllerTestPeer::observeSubmittedFrames(controller, &submitted);
+        QObject::connect(&submitted, &QVideoSink::videoFrameChanged, &app, [&](const QVideoFrame &frame) {
+            if (!frame.isValid()) return;
+            for (const auto &[older, timestamp] : retained) {
+                if (older.startTime() != timestamp) {
+                    fail(QStringLiteral("submitting a repeated frame changed an earlier queued frame timestamp"));
+                    return;
+                }
+            }
+            retained.append({frame, frame.startTime()});
+        });
+    }
     int captureErrors = 0;
     QObject::connect(&controller, &RecorderController::errorOccurred, &app, [&](const QString &message) {
         if (captureFailure && message == QStringLiteral("injected capture interruption")) ++captureErrors;
@@ -74,7 +98,7 @@ int main(int argc, char **argv) {
     });
     QTimer producer;
     producer.setTimerType(Qt::PreciseTimer);
-    producer.setInterval(40);
+    producer.setInterval(fpsCheck && fps == 25 ? 16 : 40);
     QObject::connect(&producer, &QTimer::timeout, &app, [&] { RecorderControllerTestPeer::frame(controller, desktop); });
 
     QMediaPlayer player;
@@ -84,6 +108,12 @@ int main(int argc, char **argv) {
     qint64 previous = -1;
     QObject::connect(&decodedSink, &QVideoSink::videoFrameChanged, &app, [&](const QVideoFrame &frame) {
         if (!frame.isValid()) return;
+        // Verify the file's actual presentation timeline, not just encoder metadata.
+        if (fpsCheck && qAbs(frame.startTime() - decoded * 1000000LL / fps) > 1000) {
+            fail(QStringLiteral("FPS timeline: frame %1 at %2 us, expected %3 us")
+                .arg(decoded).arg(frame.startTime()).arg(decoded * 1000000LL / fps));
+            return;
+        }
         if (frame.size() != QSize(320, 180) || frame.startTime() <= previous)
             fail(QStringLiteral("decoded size or timestamps"));
         previous = frame.startTime();
@@ -109,8 +139,24 @@ int main(int argc, char **argv) {
         }
         if (captureFailure && captureErrors != 1) { fail(QStringLiteral("capture failure was not exercised")); return; }
         // 2s recording + 1s paused. Pause must not lengthen the saved movie.
-        if (decoded < 20 || previewFrames < 20 || player.duration() < 1500 || player.duration() > 2500) {
+        if (decoded < 20 || (!staticSource && previewFrames < 20) || player.duration() < 1500 || player.duration() > 2500) {
             fail(QStringLiteral("frames=%1, preview=%2, duration=%3").arg(decoded).arg(previewFrames).arg(player.duration()));
+            return;
+        }
+        if (fpsCheck && qAbs(decoded * 1000.0 / player.duration() - fps) > 0.2) {
+            fail(QStringLiteral("actual FPS %1 does not match %2")
+                .arg(decoded * 1000.0 / player.duration()).arg(fps));
+            return;
+        }
+        for (const auto &[older, timestamp] : retained) {
+            if (older.startTime() != timestamp) {
+                fail(QStringLiteral("retained output timestamp changed from %1 to %2")
+                    .arg(timestamp).arg(older.startTime()));
+                return;
+            }
+        }
+        if (fpsCheck && retained.size() < 20) {
+            fail(QStringLiteral("submitted-frame observer saw only %1 distinct frames").arg(retained.size()));
             return;
         }
         std::cout << "PASS: cropped preview -> MP4 -> decoded pixels; pause/resume; " << decoded
@@ -133,6 +179,7 @@ int main(int argc, char **argv) {
         RecorderControllerTestPeer::frame(controller, desktop);
         if (controller.state() != RecorderController::State::Preview) { fail(QStringLiteral("preview did not start")); return; }
         RecordingOptions options;
+        options.fps = fps;
         const auto output = directory.filePath(QStringLiteral("region.mp4"));
         if (delayedPermission) {
             const auto generation = RecorderControllerTestPeer::waitForPermission(controller, output);
@@ -144,7 +191,7 @@ int main(int argc, char **argv) {
                 RecorderControllerTestPeer::grantPermission(controller, generation);
             });
         } else controller.start(target, options, {}, QMediaFormat::VideoCodec::MPEG4, output);
-        producer.start();
+        if (!staticSource) producer.start();
     });
     QTimer::singleShot(20000, &app, [&] { fail(QStringLiteral("region pipeline timed out")); });
     const int result = app.exec();

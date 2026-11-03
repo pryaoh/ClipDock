@@ -5,6 +5,8 @@ CLIPDOCK_QT_VERSION=6.8.3
 qt_sdk_has_ffmpeg() {
     local qt_sdk_root="$1" qt_sdk_plugins
     [[ -x "$qt_sdk_root/bin/qmake" ]] || return 1
+    [[ -f "$qt_sdk_root/lib/cmake/Qt6/Qt6Config.cmake" &&
+       -f "$qt_sdk_root/lib/cmake/Qt6Multimedia/Qt6MultimediaConfig.cmake" ]] || return 1
     # Official kits and Homebrew use these layouts. Prefer file inspection:
     # qmake's CPU probe can fail under a restricted runner even for a valid kit.
     local qt_sdk_directory

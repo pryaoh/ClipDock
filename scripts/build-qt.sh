@@ -12,6 +12,19 @@ if ! command -v cmake >/dev/null 2>&1; then
 fi
 ARGS=(-S "$ROOT" -B "$BUILD" -DCMAKE_BUILD_TYPE="$CONFIG" -DBUILD_TESTING=ON)
 QT_PREFIX="$(qt_sdk_select "$ROOT")"
+if [[ "$(uname -s)" == Darwin ]] && ! qt_sdk_has_ffmpeg "$QT_PREFIX"; then
+    if [[ -n "${QT_ROOT:-}" ]]; then
+        echo "QT_ROOT에 완전한 Qt SDK와 화면 캡처용 FFmpeg 플러그인이 필요합니다: $QT_ROOT" >&2
+        echo "자동 설치하려면 QT_ROOT를 해제한 뒤 다시 실행하세요: unset QT_ROOT" >&2
+        exit 1
+    fi
+    bash "$ROOT/scripts/setup-macos-qt.sh"
+    QT_PREFIX="$(qt_sdk_select "$ROOT")"
+    if ! qt_sdk_has_ffmpeg "$QT_PREFIX"; then
+        echo "화면 캡처용 Qt SDK/FFmpeg 설치를 확인할 수 없습니다." >&2
+        exit 1
+    fi
+fi
 if [[ -n "$QT_PREFIX" ]]; then
     if [[ ! -f "$QT_PREFIX/lib/cmake/Qt6/Qt6Config.cmake" ]]; then
         echo "Qt SDK 경로가 올바르지 않습니다: $QT_PREFIX" >&2

@@ -43,4 +43,15 @@ if /usr/bin/codesign --verify --deep --strict "$APP" 2>/dev/null; then
 fi
 bash "$ROOT/scripts/sign-macos-app.sh" "$APP"
 /usr/bin/codesign --verify --deep --strict "$APP"
-echo 'PASS: bundle signing, matching ID, unchanged signature, changed bundle repair'
+
+# Finder metadata can be copied into deployed frameworks/resources (including
+# cloud-synced checkouts) and makes an otherwise valid bundle unsignable.
+mkdir -p "$APP/Contents/Resources/nested"
+printf 'fixture\n' > "$APP/Contents/Resources/nested/data.txt"
+/usr/bin/xattr -wx com.apple.FinderInfo 0000000000000000000000000000000000000000000000000000000000000000 "$APP/Contents/Resources/nested"
+/usr/bin/xattr -w com.apple.ResourceFork test "$APP/Contents/Resources/nested/data.txt"
+/usr/bin/xattr -w local.clipdock.preserve test "$APP/Contents/Resources/nested/data.txt"
+bash "$ROOT/scripts/sign-macos-app.sh" "$APP"
+/usr/bin/codesign --verify --deep --strict "$APP"
+[[ "$(/usr/bin/xattr -p local.clipdock.preserve "$APP/Contents/Resources/nested/data.txt")" == test ]]
+echo 'PASS: bundle signing, matching ID, unchanged signature, changed bundle and Finder metadata repair'

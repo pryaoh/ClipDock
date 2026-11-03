@@ -53,11 +53,15 @@ int main(int argc, char **argv) {
 
 #if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
     // Duplicate/empty titles and changed enumeration order must never affect identity.
-    auto makeWindow = [](size_t id, const QString &title) {
-        auto *data = new QCapturableWindowPrivate;
-        data->id = id;
-        data->description = title;
-        return data->create();
+    auto makeWindow = []<typename Private = QCapturableWindowPrivate>(size_t id, QString title) {
+        if constexpr (requires { Private::create(id, std::move(title)); }) {
+            return Private::create(id, std::move(title));
+        } else {
+            auto *data = new Private;
+            data->id = id;
+            data->description = std::move(title);
+            return data->create();
+        }
     };
     const auto first = makeWindow(101, QStringLiteral("Same title"));
     const auto second = makeWindow(202, QStringLiteral("Same title"));

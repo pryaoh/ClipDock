@@ -6,6 +6,7 @@
 #include <QMediaCaptureSession>
 #include <QMediaFormat>
 #include <QMediaRecorder>
+#include <QImage>
 #include <QPointer>
 #include <QScreenCapture>
 #include <QTemporaryFile>
@@ -60,20 +61,24 @@ private:
     void activateCapture();
     void startWriter();
     void handleFrame(const QVideoFrame &frame);
-    void handleRegionFrame(const QVideoFrame &frame);
+    void handleCapturedFrame(const QVideoFrame &frame);
+    void sendScheduledFrame();
     void handleRecorderState(QMediaRecorder::RecorderState state);
     void fail(const QString &message, bool recorderError = false);
     void finish();
     void stopCapture();
 
     QMediaCaptureSession m_session;
-    QMediaCaptureSession m_regionSession;
-    QVideoSink m_regionSink;
-    QVideoFrameInput m_regionInput;
-    QElapsedTimer m_regionClock;
-    QElapsedTimer m_regionThrottle;
-    qint64 m_regionPausedAt = -1;
-    qint64 m_regionPausedDuration = 0;
+    QMediaCaptureSession m_captureSession;
+    QVideoSink m_captureSink;
+    QVideoFrameInput m_frameInput;
+    QElapsedTimer m_recordingClock;
+    QTimer m_frameTimer;
+    QVideoFrame m_latestFrame;
+    QImage m_latestImage;
+    qint64 m_nextFrame = 0;
+    qint64 m_pausedAt = -1;
+    qint64 m_pausedDuration = 0;
     QMetaObject::Connection m_regionGeometryConnection;
     QMediaRecorder m_recorder;
     QScreenCapture m_screen;

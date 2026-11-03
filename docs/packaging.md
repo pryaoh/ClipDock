@@ -43,7 +43,21 @@ Qt/FFmpeg 런타임을 포함하는 로컬 앱 패키지:
 
 ```sh
 ./scripts/package-macos.sh
-open dist/qt/ClipDock.app
+```
+
+스크립트가 출력하는 `실행 파일` 경로의 앱을 엽니다. 일반 폴더에서는
+`dist/qt/ClipDock.app`이며, `dist/ClipDock-macOS.zip`도 함께 생성합니다.
+
+Dropbox 등 `~/Library/CloudStorage/` 아래에서는 File Provider가 Qt 프레임워크에
+Finder 메타데이터를 다시 붙여 코드 서명을 무효화할 수 있습니다. 이 경우 자동으로
+로컬 임시 폴더에서 패키징·서명하고, 검증된 앱을 ZIP으로 저장합니다. ZIP은 동기화해도
+되지만 앱을 풀어 실행할 위치는 동기화 폴더 밖으로 선택하세요. 임시 앱 경로는 재부팅이나
+OS 정리 후 사라질 수 있으므로 보관·전달에는 ZIP을 사용합니다.
+고정된 출력 위치가 필요하면 `PACKAGE_DIR`로 동기화되지 않는 폴더를 지정합니다.
+
+```sh
+PACKAGE_DIR=/tmp/clipdock-dist ./scripts/package-macos.sh
+open /tmp/clipdock-dist/ClipDock.app
 ```
 
 기본 서명은 로컬 실행용 ad-hoc 서명입니다. 외부 배포용 Developer ID 서명 및 공증은

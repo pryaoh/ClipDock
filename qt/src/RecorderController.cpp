@@ -21,8 +21,14 @@ bool RecorderController::Target::isAvailable() const {
 
 RecorderController::RecorderController(QObject *parent) : QObject(parent) {
     m_session.setRecorder(&m_recorder);
-    m_regionSession.setVideoSink(&m_regionSink);
-    connect(&m_regionSink, &QVideoSink::videoFrameChanged, this, &RecorderController::handleRegionFrame);
+    m_captureSession.setVideoSink(&m_captureSink);
+    connect(&m_captureSink, &QVideoSink::videoFrameChanged, this, &RecorderController::handleCapturedFrame);
+    m_frameTimer.setSingleShot(true);
+    m_frameTimer.setTimerType(Qt::PreciseTimer);
+    connect(&m_frameTimer, &QTimer::timeout, this, &RecorderController::sendScheduledFrame);
+    connect(&m_frameInput, &QVideoFrameInput::readyToSendVideoFrame, this, [this] {
+        if (!m_frameTimer.isActive()) sendScheduledFrame();
+    }, Qt::QueuedConnection);
     m_startTimeout.setSingleShot(true);
     m_startTimeout.setInterval(20000);
     connect(&m_startTimeout, &QTimer::timeout, this, [this] {
@@ -40,8 +46,9 @@ RecorderController::RecorderController(QObject *parent) : QObject(parent) {
 RecorderController::~RecorderController() {
     // MainWindow defers close until StoppedState, which means the container has been finalized.
     m_session.setRecorder(nullptr);
-    m_regionSession.setScreenCapture(nullptr);
-    m_regionSession.setVideoSink(nullptr);
+    m_captureSession.setScreenCapture(nullptr);
+    m_captureSession.setWindowCapture(nullptr);
+    m_captureSession.setVideoSink(nullptr);
     m_session.setVideoFrameInput(nullptr);
     m_session.setScreenCapture(nullptr);
     m_session.setWindowCapture(nullptr);
@@ -50,12 +57,8 @@ RecorderController::~RecorderController() {
 }
 
 void RecorderController::setVideoSink(QVideoSink *sink) {
-    if (m_sink) disconnect(m_sink, nullptr, this, nullptr);
     m_sink = sink;
-    m_session.setVideoSink(sink);
-    connect(sink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
-        if (!m_target.isRegion) handleFrame(frame);
-    });
+    if (m_sink && m_latestFrame.isValid()) m_sink->setVideoFrame(m_latestFrame);
 }
 
 void RecorderController::setState(State state) {
@@ -95,6 +98,8 @@ void RecorderController::start(const Target &target, const RecordingOptions &opt
     if (!hadPreview) {
         m_target = target;
         m_sourceSize = {};
+        m_latestFrame = {};
+        m_latestImage = {};
     }
     const auto generation = ++m_generation;
     // Preview frames keep arriving while the OS permission prompt is open.
@@ -142,54 +147,71 @@ void RecorderController::activateCapture() {
     // Portal selection is user-paced and may remain open for more than 20s.
     // Encoding still has a timeout once the first frame reaches startWriter().
     if (!m_target.isPortal) m_startTimeout.start();
-    m_regionThrottle.invalidate();
-    m_regionSession.setScreenCapture(nullptr);
-    m_session.setScreenCapture(nullptr);
-    m_session.setWindowCapture(nullptr);
-    m_session.setVideoFrameInput(nullptr);
-    m_session.setVideoSink(m_target.isRegion ? nullptr : m_sink.data());
+    m_captureSession.setScreenCapture(nullptr);
+    m_captureSession.setWindowCapture(nullptr);
     if (m_target.isWindow) {
         if (!m_target.window.isValid()) { fail(QStringLiteral("선택한 창이 더 이상 존재하지 않습니다.")); return; }
-        m_session.setScreenCapture(nullptr);
-        m_session.setWindowCapture(&m_window);
+        m_captureSession.setWindowCapture(&m_window);
         m_window.setWindow(m_target.window);
         m_window.start();
     } else {
         if (!m_target.isPortal && !m_target.screen) { fail(QStringLiteral("선택한 디스플레이가 연결되어 있지 않습니다.")); return; }
-        m_session.setWindowCapture(nullptr);
+        m_captureSession.setScreenCapture(&m_screen);
         if (m_target.isRegion) {
-            m_regionSession.setScreenCapture(&m_screen);
-            m_session.setVideoFrameInput(&m_regionInput);
             m_regionGeometryConnection = connect(m_target.screen, &QScreen::geometryChanged, this, [this] {
                 fail(QStringLiteral("디스플레이 구성이 변경되었습니다. 영역을 다시 지정하세요."));
             });
-        } else m_session.setScreenCapture(&m_screen);
+        }
         if (!m_target.isPortal) m_screen.setScreen(m_target.screen);
         m_screen.start();
     }
 }
 
-void RecorderController::handleRegionFrame(const QVideoFrame &frame) {
-    if (!m_target.isRegion || !frame.isValid() || m_state == State::Idle || m_state == State::Stopping) return;
-    if (!m_target.screen || m_target.screen->size() != m_target.regionScreenSize) {
+void RecorderController::handleCapturedFrame(const QVideoFrame &frame) {
+    if (!frame.isValid() || m_state == State::Idle || m_state == State::Stopping) return;
+    if (m_target.isRegion && (!m_target.screen || m_target.screen->size() != m_target.regionScreenSize)) {
         fail(QStringLiteral("디스플레이 구성이 변경되었습니다. 녹화를 중지합니다. 영역을 다시 지정하세요."));
         return;
     }
-    if (m_regionThrottle.isValid() && m_regionThrottle.elapsed() < 1000 / m_options.fps) return;
-    m_regionThrottle.start();
-    const auto image = cropRegionImage(frame.toImage(), m_target.region, m_target.regionScreenSize);
-    if (image.isNull()) { fail(QStringLiteral("선택한 영역의 캡처 프레임을 변환하지 못했습니다.")); return; }
-    QVideoFrame cropped(image);
-    if (m_sink) m_sink->setVideoFrame(cropped);
-    handleFrame(cropped);
-    if (m_writerStarted && m_recorder.recorderState() == QMediaRecorder::RecordingState) {
-        // Custom frame inputs retain the timestamps supplied by the application.
-        // Exclude pauses explicitly, but preserve gaps caused by dropped busy frames.
-        const qint64 time = (m_regionClock.nsecsElapsed() - m_regionPausedDuration) / 1000;
-        cropped.setStartTime(time);
-        cropped.setEndTime(time + 1000000 / m_options.fps);
-        m_regionInput.sendVideoFrame(cropped); // Backpressure: drop, never queue unbounded screen images.
+    if (m_target.isRegion) {
+        m_latestImage = cropRegionImage(frame.toImage(), m_target.region, m_target.regionScreenSize);
+        if (m_latestImage.isNull()) { fail(QStringLiteral("선택한 영역의 캡처 프레임을 변환하지 못했습니다.")); return; }
+        m_latestFrame = QVideoFrame(m_latestImage);
+    } else {
+        m_latestFrame = frame;
+        m_latestImage = {};
     }
+    if (m_sink) m_sink->setVideoFrame(m_latestFrame);
+    handleFrame(m_latestFrame);
+}
+
+void RecorderController::sendScheduledFrame() {
+    if (m_state != State::Recording || !m_writerStarted || !m_latestFrame.isValid()) return;
+    const qint64 elapsed = m_recordingClock.nsecsElapsed() - m_pausedDuration;
+    const qint64 deadline = m_nextFrame * 1000000000LL / m_options.fps;
+    if (deadline > elapsed) {
+        // Absolute deadlines avoid accumulated timer rounding/drift (e.g. 30/60 FPS).
+        m_frameTimer.start(int((deadline - elapsed + 999999) / 1000000));
+        return;
+    }
+    if (elapsed - deadline > 2000000000LL) {
+        fail(QStringLiteral("인코딩이 설정한 FPS를 따라가지 못합니다. FPS 또는 출력 크기를 낮춰 다시 녹화하세요."));
+        return;
+    }
+    // Keep only the newest capture. Repeat it when the source is static/slow,
+    // but retain every output timestamp so the file has the requested cadence.
+    if (m_latestImage.isNull()) m_latestImage = m_latestFrame.toImage();
+    if (m_latestImage.isNull()) { fail(QStringLiteral("캡처 프레임을 변환하지 못했습니다.")); return; }
+    // QVideoFrame copies explicitly share timestamps. Give each submission its
+    // own metadata; the cached QImage still shares immutable pixel storage.
+    QVideoFrame output(m_latestImage);
+    output.setStartTime(m_nextFrame * 1000000LL / m_options.fps);
+    output.setEndTime((m_nextFrame + 1) * 1000000LL / m_options.fps);
+    if (m_frameInput.sendVideoFrame(output)) {
+        ++m_nextFrame;
+        m_frameTimer.start(0); // Recompute the next absolute deadline, yielding to the UI.
+    }
+    // If the encoder is full, readyToSendVideoFrame resumes this same timestamp.
 }
 
 void RecorderController::handleFrame(const QVideoFrame &frame) {
@@ -221,26 +243,30 @@ void RecorderController::startWriter() {
         m_session.setAudioInput(&m_audio);
     } else m_session.setAudioInput(nullptr);
     configureRecorder(m_recorder, m_options, QSize(width, height), m_codec);
+    m_session.setVideoFrameInput(&m_frameInput);
     m_recorder.setOutputLocation(QUrl::fromLocalFile(m_temporary->fileName()));
     m_writerStarted = true;
-    m_regionClock.start();
-    m_regionPausedAt = -1;
-    m_regionPausedDuration = 0;
+    m_recordingClock.start();
+    m_nextFrame = 0;
+    m_pausedAt = -1;
+    m_pausedDuration = 0;
     m_startTimeout.start();
     m_recorder.record();
 }
 
 void RecorderController::handleRecorderState(QMediaRecorder::RecorderState state) {
     if (state == QMediaRecorder::RecordingState && m_state != State::Stopping) {
-        if (m_target.isRegion && m_regionPausedAt >= 0) {
-            m_regionPausedDuration += m_regionClock.nsecsElapsed() - m_regionPausedAt;
-            m_regionPausedAt = -1;
+        if (m_pausedAt >= 0) {
+            m_pausedDuration += m_recordingClock.nsecsElapsed() - m_pausedAt;
+            m_pausedAt = -1;
         }
         m_startTimeout.stop();
         setState(State::Recording);
+        m_frameTimer.start(0);
         emit statusChanged(QStringLiteral("녹화 중 · %1 FPS · %2 kbps").arg(m_options.fps).arg(m_options.bitrateKbps));
     } else if (state == QMediaRecorder::PausedState && m_state != State::Stopping) {
-        if (m_target.isRegion && m_regionPausedAt < 0) m_regionPausedAt = m_regionClock.nsecsElapsed();
+        m_frameTimer.stop();
+        if (m_pausedAt < 0) m_pausedAt = m_recordingClock.nsecsElapsed();
         setState(State::Paused);
         emit statusChanged(QStringLiteral("일시정지 중"));
     } else if (state == QMediaRecorder::StoppedState && m_writerStarted) {
@@ -255,18 +281,23 @@ void RecorderController::togglePause() {
 
 void RecorderController::stopCapture() {
     m_startTimeout.stop();
+    m_frameTimer.stop();
     disconnect(m_regionGeometryConnection);
     m_screen.stop();
     m_window.stop();
-    m_regionSession.setScreenCapture(nullptr);
+    m_captureSession.setScreenCapture(nullptr);
+    m_captureSession.setWindowCapture(nullptr);
     m_session.setVideoFrameInput(nullptr);
     m_session.setAudioInput(nullptr);
+    m_latestFrame = {};
+    m_latestImage = {};
 }
 
 void RecorderController::stop() {
     if (m_state == State::Idle || m_state == State::Stopping) return;
     ++m_generation;
     setState(State::Stopping);
+    m_frameTimer.stop();
     emit statusChanged(QStringLiteral("녹화 파일 마무리 중…"));
     m_startTimeout.stop();
     if (m_writerStarted && m_recorder.recorderState() != QMediaRecorder::StoppedState) {

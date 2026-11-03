@@ -32,6 +32,11 @@ if(CLIPDOCK_CORE_ONLY)
 endif()
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Multimedia MultimediaWidgets)
+# Recent Qt versions no longer load private targets with the public module.
+# Qt 6.8 already exports this target; newer kits ship a separate package.
+if((APPLE OR WIN32) AND NOT TARGET Qt6::MultimediaPrivate)
+    find_package(Qt6MultimediaPrivate ${Qt6_VERSION} EXACT REQUIRED)
+endif()
 # Qt 6.8's OpenGL wrapper exports the legacy Carbon AGL framework even though
 # 64-bit Qt does not use its API. macOS 26 SDKs no longer ship its linker stub.
 # Remove only that obsolete dependency; keep Qt's real OpenGL dependency.
@@ -120,7 +125,12 @@ if(BUILD_TESTING)
     add_test(NAME region_recording COMMAND region_recording_tests)
     add_test(NAME recording_capture_failure COMMAND region_recording_tests --capture-failure)
     add_test(NAME recording_delayed_permission COMMAND region_recording_tests --delayed-permission)
+    add_test(NAME recording_fps25 COMMAND region_recording_tests --fps-check)
+    add_test(NAME recording_fps30_static COMMAND region_recording_tests --fps-check --static-source)
+    add_test(NAME recording_fps60 COMMAND region_recording_tests --fps-check --fps60)
+    add_test(NAME recording_fps25_full_frame COMMAND region_recording_tests --fps-check --full-frame)
     set_tests_properties(region_recording recording_capture_failure recording_delayed_permission
+        recording_fps25 recording_fps30_static recording_fps60 recording_fps25_full_frame
         PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_MEDIA_BACKEND=ffmpeg")
 
     qt_add_executable(recorder_lifecycle_tests qt/tests/RecorderLifecycleTests.cpp

@@ -30,8 +30,8 @@ public:
         return generation;
     }
     static void frame(RecorderController &controller, const QImage &image, bool region) {
-        if (region) controller.handleRegionFrame(QVideoFrame(image));
-        else controller.handleFrame(QVideoFrame(image));
+        Q_UNUSED(region);
+        controller.m_captureSink.setVideoFrame(QVideoFrame(image));
     }
     static void answer(RecorderController &controller, quint64 generation, bool granted) {
         controller.completePermissionRequest(generation, true, granted);
