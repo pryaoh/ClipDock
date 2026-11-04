@@ -2,15 +2,19 @@
 #include "RegionPicker.h"
 #include "GlobalShortcuts.h"
 #include <QAccessible>
+#include <QAction>
+#include <QDir>
 #include <QApplication>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QSettings>
+#include <QSpinBox>
 #include <QOperatingSystemVersion>
 #include <QFileDialog>
 #include <QDialog>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QScreen>
 #include <QShortcut>
@@ -55,6 +59,168 @@ public:
         }
         exclude->setChecked(true);
         minimize->setChecked(false);
+    }
+    static void checkRecordingPreferences() {
+        auto *screen = QGuiApplication::screens().last();
+        check(!screen->name().isEmpty(), "preferences fixture provides named displays");
+        const QRect region(20, 30, 160, 110);
+        {
+            MainWindow original;
+            original.m_resolution->setCurrentIndex(original.m_resolution->findData(2560));
+            original.m_fps->setCurrentIndex(original.m_fps->findData(60));
+            original.m_bitrate->setValue(12345);
+            original.m_sourceType->setCurrentIndex(2);
+            original.setRegion(screen, region);
+            original.m_sourceType->setCurrentIndex(0);
+            original.m_sourceType->setCurrentIndex(2);
+            check(original.m_targets.value(original.m_target->currentIndex()).region == region,
+                  "last region survives switching away and back");
+        }
+        {
+            MainWindow restored;
+            check(restored.m_resolution->currentData().toInt() == 2560,
+                  "output size survives window recreation");
+            check(restored.m_fps->currentData().toInt() == 60 && restored.m_bitrate->value() == 12345,
+                  "FPS and bitrate survive window recreation");
+            const auto target = restored.m_targets.value(restored.m_target->currentIndex());
+            check(restored.m_sourceType->currentIndex() == 2 && target.screen == screen
+                  && target.region == region && target.isAvailable(), "last monitor and local region survive recreation");
+            restored.refreshTargets();
+            restored.refreshAudio();
+            check(restored.m_targets.value(restored.m_target->currentIndex()).region == region,
+                  "target refresh does not overwrite region through intermediate signals");
+            restored.updateState(RecorderController::State::Recording);
+            check(!restored.m_resetPreferences->isEnabled(), "reset unavailable during recording");
+            restored.resetPreferences();
+            check(restored.m_fps->currentData().toInt() == 60, "direct reset also rejects active recording");
+            restored.updateState(RecorderController::State::Idle);
+            restored.m_excludeSelf->setChecked(false);
+            restored.m_minimizeRecording->setChecked(true);
+            restored.resetPreferences();
+            check(restored.m_fps->currentData().toInt() == 25 && restored.m_bitrate->value() == 5000
+                  && restored.m_resolution->currentData().toInt() == 1920 && restored.m_audio->currentIndex() == 0,
+                  "reset immediately restores defaults");
+            check(restored.m_excludeSelf->isChecked() && !restored.m_minimizeRecording->isChecked(),
+                  "reset restores capture policy defaults");
+            restored.m_sourceType->setCurrentIndex(2);
+            check(restored.m_targets.value(restored.m_target->currentIndex()).region.isEmpty()
+                  && !restored.m_record->isEnabled(), "reset does not resurrect previous region");
+            restored.resetPreferences();
+        }
+        {
+            MainWindow restored;
+            check(restored.m_fps->currentData().toInt() == 25 && !restored.m_preferences.region.present,
+                  "reset remains effective after recreation");
+            restored.m_sourceType->setCurrentIndex(2);
+            restored.setRegion(screen, region);
+        }
+        QSettings().setValue(QStringLiteral("lastRegion/devicePixelRatio"), screen->devicePixelRatio() + 0.5);
+        {
+            MainWindow changed;
+            check(changed.m_sourceType->currentIndex() == 2 && !changed.m_record->isEnabled()
+                  && changed.m_regionLabel->text().contains(QStringLiteral("다시 선택")),
+                  "scale changes require reselection instead of recording a different region");
+            changed.resetPreferences();
+        }
+        QTemporaryDir folder;
+        check(folder.isValid(), "save folder fixture");
+        {
+            MainWindow window;
+            bool visited = false;
+            QTimer timer;
+            timer.setInterval(10);
+            QObject::connect(&timer, &QTimer::timeout, &window, [&] {
+                for (auto *widget : QApplication::topLevelWidgets()) {
+                    auto *dialog = qobject_cast<QFileDialog *>(widget);
+                    if (!dialog || !dialog->isVisible()) continue;
+                    visited = true; timer.stop();
+                    dialog->selectFile(folder.filePath(QStringLiteral("saved.mp4")));
+                    QMetaObject::invokeMethod(dialog, "accept", Qt::QueuedConnection);
+                }
+            });
+            QObject::connect(&window.m_controller, &RecorderController::stateChanged, &window, [&](auto state) {
+                if (state == RecorderController::State::WaitingForPermission) window.m_controller.stop();
+            });
+            timer.start();
+            window.begin(true);
+            check(visited && window.m_preferences.outputFolder == folder.path(), "accepting output remembers parent folder");
+        }
+        {
+            MainWindow restored;
+            bool visited = false;
+            QTimer timer;
+            timer.setInterval(10);
+            QObject::connect(&timer, &QTimer::timeout, &restored, [&] {
+                for (auto *widget : QApplication::topLevelWidgets()) {
+                    auto *dialog = qobject_cast<QFileDialog *>(widget);
+                    if (!dialog || !dialog->isVisible()) continue;
+                    check(dialog->directory().absolutePath() == folder.path(), "save dialog opens remembered folder");
+                    visited = true; timer.stop();
+                    dialog->setDirectory(QDir::tempPath());
+                    dialog->reject();
+                }
+            });
+            timer.start();
+            restored.begin(true);
+            check(visited && restored.m_preferences.outputFolder == folder.path(), "cancel does not change remembered folder");
+            check(restored.m_controller.state() == RecorderController::State::Idle && QDir(folder.path()).isEmpty(),
+                  "cancelled or stopped startup creates no output");
+            restored.resetPreferences();
+        }
+        {
+            MainWindow stale;
+            stale.m_sourceType->setCurrentIndex(2);
+            stale.setRegion(screen, region);
+            // Simulate a selection made in a different coordinate scale. The UI target
+            // still has the same screen pointer and logical size, as during a modal dialog.
+            stale.m_preferences.region.screen.devicePixelRatio += 0.5;
+            bool started = false, visited = false;
+            QObject::connect(&stale.m_controller, &RecorderController::stateChanged, &stale, [&](auto state) {
+                if (state == RecorderController::State::WaitingForPermission) {
+                    started = true; stale.m_controller.stop();
+                }
+            });
+            QTimer timer;
+            timer.setInterval(10);
+            QObject::connect(&timer, &QTimer::timeout, &stale, [&] {
+                for (auto *widget : QApplication::topLevelWidgets()) {
+                    if (auto *message = qobject_cast<QMessageBox *>(widget); message && message->isVisible())
+                        message->accept();
+                    if (auto *dialog = qobject_cast<QFileDialog *>(widget); dialog && dialog->isVisible()) {
+                        visited = true;
+                        dialog->selectFile(folder.filePath(QStringLiteral("stale.mp4")));
+                        QMetaObject::invokeMethod(dialog, "accept", Qt::QueuedConnection);
+                    }
+                }
+            });
+            timer.start();
+            stale.begin(true);
+            check(visited && !started, "stale region scale is rejected after accepting the save dialog");
+        }
+        {
+            QTemporaryDir disappearingFolder;
+            check(disappearingFolder.isValid(), "removable folder fixture");
+            QSettings().setValue(QStringLiteral("recording/outputFolder"), disappearingFolder.path());
+            QSettings().setValue(QStringLiteral("recording/sourceType"), QStringLiteral("screen"));
+            MainWindow window;
+            check(QDir().rmdir(disappearingFolder.path()), "delete empty fixture after preferences load");
+            bool visited = false;
+            QTimer timer;
+            timer.setInterval(10);
+            QObject::connect(&timer, &QTimer::timeout, &window, [&] {
+                for (auto *widget : QApplication::topLevelWidgets()) {
+                    auto *dialog = qobject_cast<QFileDialog *>(widget);
+                    if (!dialog || !dialog->isVisible()) continue;
+                    check(dialog->directory().exists() && dialog->directory().absolutePath() != disappearingFolder.path(),
+                          "folder deleted after load uses a reachable save location");
+                    visited = true; timer.stop(); dialog->reject();
+                }
+            });
+            timer.start(); window.begin(true);
+            check(visited, "missing folder still opens save dialog");
+        }
+        QSettings().clear();
+        std::cout << "PASS: UI preferences, region restore, invalid scale, reset and save folder\n";
     }
     static void begin(MainWindow &window) { window.begin(true); }
     static void clearTargets(MainWindow &window) {
@@ -355,6 +521,10 @@ int main(int argc, char **argv) {
     QCoreApplication::setApplicationName(QStringLiteral("CapturePolicy"));
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, directory.path());
+    if (app.arguments().contains(QStringLiteral("--preferences"))) {
+        MainWindowTestPeer::checkRecordingPreferences();
+        return 0;
+    }
     MainWindow window;
     if (app.arguments().contains(QStringLiteral("--startup-policy"))) {
         MainWindowTestPeer::checkStartupVisible(window);

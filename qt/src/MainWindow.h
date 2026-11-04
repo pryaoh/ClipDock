@@ -1,5 +1,6 @@
 #pragma once
 #include "RecorderController.h"
+#include "RecordingPreferences.h"
 #include <QMainWindow>
 #include <QMediaDevices>
 #include <QList>
@@ -28,6 +29,11 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 private:
     friend class MainWindowTestPeer;
+    void restorePreferences();
+    void savePreferences();
+    void resetPreferences();
+    void setRegion(QScreen *screen, const QRect &region);
+    void watchScreen(QScreen *screen);
     void refreshTargets();
     void pickWindow();
     void pickRegion();
@@ -43,6 +49,10 @@ private:
     void showError(const QString &message);
     void dispatchShortcut(ShortcutAction action, const QString &activationToken = QString());
 
+    RecordingPreferences m_preferences;
+    bool m_restoringPreferences = true;
+    QPointer<QScreen> m_regionScreen;
+    QAction *m_resetPreferences = nullptr;
     RecorderController m_controller;
     QMediaDevices m_devices;
     QList<RecorderController::Target> m_targets;

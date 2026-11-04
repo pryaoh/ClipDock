@@ -49,6 +49,17 @@ if(APPLE AND TARGET WrapOpenGL::WrapOpenGL)
     endif()
 endif()
 qt_standard_project_setup()
+add_library(clipdock_preferences STATIC qt/src/RecordingPreferences.cpp qt/src/RecordingPreferences.h)
+target_include_directories(clipdock_preferences PUBLIC qt/src)
+target_link_libraries(clipdock_preferences PUBLIC Qt6::Gui Qt6::Multimedia)
+if(MSVC)
+    target_compile_options(clipdock_preferences PRIVATE /utf-8)
+endif()
+if(BUILD_TESTING)
+    qt_add_executable(recording_preferences_tests qt/tests/RecordingPreferencesTests.cpp)
+    target_link_libraries(recording_preferences_tests PRIVATE clipdock_preferences)
+    add_test(NAME recording_preferences COMMAND recording_preferences_tests)
+endif()
 add_library(clipdock_capture STATIC qt/src/X11Capture.cpp qt/src/X11Capture.h)
 target_include_directories(clipdock_capture PUBLIC qt/src)
 target_link_libraries(clipdock_capture PUBLIC Qt6::Gui)
@@ -82,7 +93,7 @@ qt_add_executable(ClipDock WIN32 MACOSX_BUNDLE
     qt/src/NativeWindowPicker.cpp qt/src/NativeWindowPicker.h
     qt/src/RegionPicker.cpp qt/src/RegionPicker.h qt/src/RegionCapture.h
 )
-target_link_libraries(ClipDock PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts clipdock_capture)
+target_link_libraries(ClipDock PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts clipdock_capture clipdock_preferences)
 qt_add_resources(ClipDock ui_icons PREFIX /clipdock BASE qt/resources
     FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm qt/resources/checkmark.xpm)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -213,7 +224,7 @@ if(BUILD_TESTING)
         qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp qt/src/RegionPicker.cpp qt/src/RegionPicker.h
         qt/src/WindowPicker.cpp qt/src/WindowPicker.h qt/src/NativeWindowPicker.cpp)
     target_include_directories(main_window_tests PRIVATE qt/src)
-    target_link_libraries(main_window_tests PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts clipdock_capture)
+    target_link_libraries(main_window_tests PRIVATE Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts clipdock_capture clipdock_preferences)
     qt_add_resources(main_window_tests ui_icons PREFIX /clipdock BASE qt/resources
         FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm qt/resources/checkmark.xpm)
     if(APPLE OR WIN32)
@@ -227,6 +238,11 @@ if(BUILD_TESTING)
     if(MSVC)
         target_compile_options(main_window_tests PRIVATE /utf-8)
     endif()
+    add_test(NAME main_window_preferences COMMAND main_window_tests --preferences
+        -platform "offscreen:configfile=qt/tests/fixtures/multiple-screens.json")
+    set_tests_properties(main_window_preferences PROPERTIES TIMEOUT 30
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "QT_SCALE_FACTOR_ROUNDING_POLICY=PassThrough")
     add_test(NAME main_window COMMAND main_window_tests)
     set_tests_properties(main_window PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_test(NAME main_window_startup_policy COMMAND main_window_tests --startup-policy)
@@ -279,7 +295,7 @@ if(BUILD_TESTING)
                     qt/src/RegionPicker.cpp qt/src/RegionPicker.h
                     qt/src/WindowPicker.cpp qt/src/WindowPicker.h qt/src/NativeWindowPicker.cpp)
                 target_link_libraries(x11_capture_exclusion_tests PRIVATE
-                    Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts clipdock_capture X11::X11)
+                    Qt6::Widgets Qt6::Multimedia Qt6::MultimediaWidgets clipdock_shortcuts clipdock_capture clipdock_preferences X11::X11)
                 qt_add_resources(x11_capture_exclusion_tests ui_icons PREFIX /clipdock BASE qt/resources
                     FILES qt/resources/chevron-down.xpm qt/resources/chevron-up.xpm qt/resources/checkmark.xpm)
                 foreach(mode preview direct region opt-out)
