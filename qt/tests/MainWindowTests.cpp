@@ -542,6 +542,17 @@ int main(int argc, char **argv) {
         background.setStyleSheet(QStringLiteral("background: #00ff00;"));
         background.setGeometry(app.primaryScreen()->geometry());
         background.show();
+        // Desktop capture can be change-driven. Keep the owned background
+        // changing so three new excluded frames do not depend on unrelated
+        // desktop activity; both colors still satisfy the green pixel check.
+        QTimer backgroundUpdates;
+        bool alternateBackground = false;
+        QObject::connect(&backgroundUpdates, &QTimer::timeout, &app, [&] {
+            alternateBackground = !alternateBackground;
+            background.setStyleSheet(alternateBackground
+                ? QStringLiteral("background: #00fa00;") : QStringLiteral("background: #00ff00;"));
+        });
+        backgroundUpdates.start(100);
         window.move(app.primaryScreen()->availableGeometry().topLeft() + QPoint(40, 40));
         window.show();
         QLabel marker(&window);
@@ -556,6 +567,8 @@ int main(int argc, char **argv) {
         capture.setScreen(app.primaryScreen());
         bool baselineSeen = false, restored = false;
         int excludedFrames = 0;
+        int capturedFrames = 0;
+        QColor lastColor;
         QObject::connect(&sink, &QVideoSink::videoFrameChanged, &app, [&](const QVideoFrame &frame) {
             const auto image = frame.toImage();
             if (image.isNull()) return;
@@ -563,6 +576,8 @@ int main(int argc, char **argv) {
             const auto point = marker.mapToGlobal(marker.rect().center()) - screenRect.topLeft();
             const QColor color = image.pixelColor(point.x() * image.width() / screenRect.width(),
                                                    point.y() * image.height() / screenRect.height());
+            ++capturedFrames;
+            lastColor = color;
             if (!baselineSeen) {
                 if (color.red() < 220 || color.blue() < 220 || color.green() > 30) return;
                 baselineSeen = true;
@@ -584,7 +599,14 @@ int main(int argc, char **argv) {
             std::cerr << "FAIL capture: " << message.toStdString() << '\n'; app.exit(1);
         });
         QTimer::singleShot(15000, &app, [&] {
-            std::cerr << "FAIL: real screen capture exclusion; baseline=" << baselineSeen << '\n'; app.exit(1);
+            DWORD affinity = 0;
+            const bool affinityReadable = GetWindowDisplayAffinity(reinterpret_cast<HWND>(window.winId()), &affinity);
+            std::cerr << "FAIL: real screen capture exclusion; baseline=" << baselineSeen
+                      << " restored=" << restored << " excluded_frames=" << excludedFrames
+                      << " captured_frames=" << capturedFrames << " last_rgb=" << lastColor.red()
+                      << ',' << lastColor.green() << ',' << lastColor.blue()
+                      << " affinity_readable=" << affinityReadable << " affinity=" << affinity << '\n';
+            app.exit(1);
         });
         QTimer::singleShot(500, &app, [&] {
             capture.start();

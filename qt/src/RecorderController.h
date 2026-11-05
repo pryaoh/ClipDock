@@ -1,5 +1,6 @@
 #pragma once
 #include "RecordingOptions.h"
+#include "WindowCaptureBootstrap.h"
 #include <QAudioDevice>
 #include <QAudioInput>
 #include <QCapturableWindow>
@@ -90,6 +91,7 @@ private:
     QMediaRecorder m_recorder;
     QScreenCapture m_screen;
     QWindowCapture m_window;
+    WindowCaptureBootstrap m_windowBootstrap;
     QAudioInput m_audio;
     QTimer m_startTimeout;
     QTimer m_protectedCaptureTimer;
