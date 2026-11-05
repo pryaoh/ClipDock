@@ -23,6 +23,8 @@
 #include <QPushButton>
 #include <QScreen>
 #include <QScopedValueRollback>
+#include <QSignalBlocker>
+#include <QStandardItemModel>
 #include <QScrollArea>
 #include <QShortcut>
 #include <QSpinBox>
@@ -317,6 +319,15 @@ MainWindow::MainWindow() {
         QWidget::setTabOrder(focusOrder[i - 1], focusOrder[i]);
 
     auto *fileMenu = menuBar()->addMenu(QStringLiteral("파일"));
+    m_resetPreferences = fileMenu->addAction(QStringLiteral("설정 초기화…"));
+    m_resetPreferences->setObjectName(QStringLiteral("resetPreferencesAction"));
+    connect(m_resetPreferences, &QAction::triggered, this, [this] {
+        if (m_captureState != RecorderController::State::Idle || m_selectingOutput || m_picker || m_regionPicker) return;
+        if (QMessageBox::question(this, QStringLiteral("설정 초기화"),
+            QStringLiteral("녹화 설정과 저장된 영역을 기본값으로 되돌릴까요? 녹화 파일은 유지됩니다.")) == QMessageBox::Yes)
+            resetPreferences();
+    });
+    fileMenu->addSeparator();
     auto *quit = fileMenu->addAction(QStringLiteral("종료"));
     quit->setShortcut(QKeySequence::Quit);
     connect(quit, &QAction::triggered, this, &QWidget::close);
@@ -354,7 +365,13 @@ MainWindow::MainWindow() {
     connect(refresh, &QPushButton::clicked, this, [this] { refreshTargets(); refreshAudio(); });
     connect(m_pickWindow, &QPushButton::clicked, this, &MainWindow::pickWindow);
     connect(m_pickRegion, &QPushButton::clicked, this, &MainWindow::pickRegion);
-    connect(m_sourceType, &QComboBox::currentIndexChanged, this, &MainWindow::refreshTargets);
+    connect(m_sourceType, &QComboBox::currentIndexChanged, this, [this] {
+        refreshTargets();
+        savePreferences();
+    });
+    for (auto *combo : {m_resolution, m_fps, m_codec, m_audio})
+        connect(combo, &QComboBox::currentIndexChanged, this, &MainWindow::savePreferences);
+    connect(m_bitrate, &QSpinBox::valueChanged, this, &MainWindow::savePreferences);
     connect(m_target, &QComboBox::currentIndexChanged, this, [this] {
         m_target->setToolTip(m_target->currentText());
         updateRegionLabel(); updateState(m_controller.state());
@@ -364,6 +381,11 @@ MainWindow::MainWindow() {
     });
     connect(&m_devices, &QMediaDevices::audioInputsChanged, this, [this] {
         if (m_controller.state() == RecorderController::State::Idle) refreshAudio();
+    });
+    for (auto *screen : QGuiApplication::screens()) watchScreen(screen);
+    connect(qApp, &QGuiApplication::screenAdded, this, [this](QScreen *screen) {
+        watchScreen(screen);
+        if (m_controller.state() == RecorderController::State::Idle) refreshTargets();
     });
     connect(qApp, &QGuiApplication::screenRemoved, this, [this] {
         if (m_controller.state() == RecorderController::State::Idle) refreshTargets();
@@ -379,7 +401,15 @@ MainWindow::MainWindow() {
     connect(m_reveal, &QPushButton::clicked, this, [this] {
         QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(m_lastFile).absolutePath()));
     });
-    connect(&m_controller, &RecorderController::stateChanged, this, &MainWindow::updateState);
+    connect(&m_controller, &RecorderController::stateChanged, this, [this](RecorderController::State state) {
+        updateState(state);
+        if (state == RecorderController::State::Idle) {
+            // Display changes during capture must be reflected before the next start.
+            // Window enumeration may request permission and should remain user initiated.
+            if (m_sourceType->currentIndex() != 1) refreshTargets();
+            refreshAudio();
+        }
+    });
     connect(&m_controller, &RecorderController::recordingAboutToStart, this, [this] {
         applyCaptureExclusion();
         if (m_minimizeRecording->isChecked() || needsFallbackMinimize()) minimizeForRecording();
@@ -412,6 +442,7 @@ MainWindow::MainWindow() {
     m_shortcuts->retry();
     refreshTargets();
     refreshAudio();
+    restorePreferences();
     updateState(RecorderController::State::Idle);
     m_captureReady = true;
     m_controller.setCaptureExclusionProvider([this] {
@@ -426,6 +457,84 @@ MainWindow::MainWindow() {
     qApp->installEventFilter(this);
 }
 
+void MainWindow::restorePreferences() {
+    m_restoringPreferences = true;
+    QSettings store;
+    QList<QByteArray> inputs;
+    for (const auto &device : m_audioDevices) inputs.append(device.id());
+    QMediaFormat format(QMediaFormat::MPEG4);
+    const auto codecs = format.supportedVideoCodecs(QMediaFormat::Encode);
+    m_preferences = RecordingPreferences::load(store, codecs, inputs);
+    m_resolution->setCurrentIndex(m_resolution->findData(m_preferences.options.maxEdge));
+    m_fps->setCurrentIndex(m_fps->findData(m_preferences.options.fps));
+    m_bitrate->setValue(m_preferences.options.bitrateKbps);
+    if (auto *model = qobject_cast<QStandardItemModel *>(m_codec->model()))
+        for (int i = 0; i < m_codec->count(); ++i)
+            model->item(i)->setEnabled(codecs.contains(static_cast<QMediaFormat::VideoCodec>(m_codec->itemData(i).toInt())));
+    m_codec->setCurrentIndex(m_codec->findData(int(m_preferences.codec)));
+    m_audio->setCurrentIndex(std::max(0, m_audio->findData(m_preferences.audioId)));
+    m_sourceType->setCurrentIndex(m_preferences.regionMode && !m_portalCapture ? 2 : 0);
+    refreshTargets();
+    if (m_preferences.usedFallback)
+        m_status->setText(QStringLiteral("사용할 수 없는 저장 설정을 기본값으로 복원했습니다. 코덱과 오디오 입력을 확인하세요."));
+    if (m_codec->currentIndex() < 0)
+        m_status->setText(QStringLiteral("사용 가능한 MP4 인코더가 없습니다. Qt 멀티미디어 설치를 확인하세요."));
+    // The constructor starts with writes suppressed; subsequent edits may now be saved.
+    m_restoringPreferences = false;
+}
+
+void MainWindow::savePreferences() {
+    if (m_restoringPreferences) return;
+    m_preferences.options.maxEdge = m_resolution->currentData().toInt();
+    m_preferences.options.fps = m_fps->currentData().toInt();
+    m_preferences.options.bitrateKbps = m_bitrate->value();
+    m_preferences.codec = m_codec->currentIndex() < 0 ? QMediaFormat::VideoCodec::Unspecified
+        : static_cast<QMediaFormat::VideoCodec>(m_codec->currentData().toInt());
+    m_preferences.audioId = m_audio->currentData().toByteArray();
+    m_preferences.regionMode = m_sourceType->currentIndex() == 2;
+    QSettings store;
+    m_preferences.save(store);
+}
+
+void MainWindow::resetPreferences() {
+    if (m_captureState != RecorderController::State::Idle || m_selectingOutput || m_picker || m_regionPicker) return;
+    QSettings store;
+    RecordingPreferences::reset(store);
+    m_regionScreen.clear();
+    m_excludeSelf->setChecked(true);
+    m_minimizeRecording->setChecked(false);
+    restorePreferences();
+    updateState(m_controller.state());
+    m_status->setText(QStringLiteral("설정을 초기화했습니다. 녹화 대상과 오디오 입력을 확인하세요."));
+}
+
+void MainWindow::watchScreen(QScreen *screen) {
+    const auto changed = [this] {
+        if (m_controller.state() == RecorderController::State::Idle) refreshTargets();
+    };
+    connect(screen, &QScreen::geometryChanged, this, changed);
+    connect(screen, &QScreen::logicalDotsPerInchChanged, this, changed);
+    connect(screen, &QScreen::physicalDotsPerInchChanged, this, changed);
+}
+
+void MainWindow::setRegion(QScreen *screen, const QRect &region) {
+    if (!screen || region.width() < 16 || region.height() < 16
+        || !QRect(QPoint(), screen->size()).contains(region)) return;
+    m_preferences.region = {ScreenDescriptor::fromScreen(screen), region, true};
+    m_regionScreen = screen; // A live explicit selection remains usable even with missing EDID metadata.
+    for (qsizetype i = 0; i < m_targets.size(); ++i) {
+        auto &target = m_targets[i];
+        if (!target.isRegion || target.screen != screen) continue;
+        target.region = region;
+        target.regionScreenSize = screen->size();
+        m_target->setCurrentIndex(int(i));
+        break;
+    }
+    savePreferences();
+    updateRegionLabel();
+    updateState(m_controller.state());
+}
+
 void MainWindow::refreshTargets() {
     if (m_controller.state() != RecorderController::State::Idle) return;
     const int oldIndex = m_target->currentIndex();
@@ -435,6 +544,7 @@ void MainWindow::refreshTargets() {
     m_pickWindow->setEnabled(WindowPicker::isSupported());
     m_pickRegion->setVisible(regionMode);
     m_regionLabel->setVisible(regionMode);
+    const QSignalBlocker targetSignals(m_target);
     m_target->clear();
     m_targets.clear();
     m_target->setEnabled(!m_portalCapture);
@@ -444,14 +554,20 @@ void MainWindow::refreshTargets() {
         m_targets.append(target);
         m_target->addItem(QStringLiteral("시작 시 시스템 공유 창에서 선택"));
     } else if (m_sourceType->currentIndex() != 1) {
-        for (auto *screen : QGuiApplication::screens()) {
+        const auto screens = QGuiApplication::screens();
+        QList<ScreenDescriptor> descriptors;
+        for (const auto *screen : screens) descriptors.append(ScreenDescriptor::fromScreen(screen));
+        const int restoredIndex = m_preferences.region.matchingScreen(descriptors);
+        for (auto *screen : screens) {
             RecorderController::Target target;
             target.screen = screen;
             target.isRegion = regionMode;
-            if (regionMode && previous.isRegion && previous.screen == screen
-                && previous.regionScreenSize == screen->size()) {
-                target.region = previous.region;
-                target.regionScreenSize = previous.regionScreenSize;
+            const bool liveRegion = m_regionScreen == screen && m_preferences.region.present
+                && m_preferences.region.screen.logicalSize == screen->size()
+                && qFuzzyCompare(m_preferences.region.screen.devicePixelRatio, screen->devicePixelRatio());
+            if (regionMode && (liveRegion || screens.indexOf(screen) == restoredIndex)) {
+                target.region = m_preferences.region.rect;
+                target.regionScreenSize = screen->size();
             }
             m_targets.append(target);
             const auto name = screen->name().isEmpty() ? QStringLiteral("디스플레이 %1").arg(m_targets.size()) : screen->name();
@@ -482,10 +598,14 @@ void MainWindow::refreshTargets() {
             }
         }
     }
-    if (!previous.isWindow && previous.screen) {
+    if (regionMode && !previous.isRegion) {
+        for (qsizetype i = 0; i < m_targets.size(); ++i)
+            if (!m_targets[i].region.isEmpty()) m_target->setCurrentIndex(int(i));
+    } else if (!previous.isWindow && previous.screen) {
         for (qsizetype i = 0; i < m_targets.size(); ++i)
             if (m_targets[i].screen == previous.screen) m_target->setCurrentIndex(int(i));
     }
+    m_target->setToolTip(m_target->currentText());
     if (m_targets.isEmpty()) m_status->setText(QStringLiteral("사용 가능한 대상이 없습니다. 권한을 확인하고 새로고침하세요."));
     updateRegionLabel();
     updateState(m_controller.state());
@@ -494,7 +614,9 @@ void MainWindow::refreshTargets() {
 void MainWindow::updateRegionLabel() {
     const int index = m_target->currentIndex();
     if (index < 0 || index >= m_targets.size() || m_targets[index].region.isEmpty()) {
-        m_regionLabel->setText(QStringLiteral("'영역 지정'을 누르고 원하는 모니터에서 드래그하세요. 영역 안에 보이는 모든 내용이 녹화됩니다."));
+        m_regionLabel->setText(m_preferences.region.present
+            ? QStringLiteral("이 화면에서 이전 영역을 복원할 수 없습니다. 모니터·해상도·배율을 확인하고 '영역 지정'으로 다시 선택하세요.")
+            : QStringLiteral("'영역 지정'을 누르고 원하는 모니터에서 드래그하세요. 영역 안에 보이는 모든 내용이 녹화됩니다."));
         m_pickRegion->setText(QStringLiteral("영역 지정"));
         return;
     }
@@ -516,15 +638,7 @@ void MainWindow::pickRegion() {
     m_regionPicker = new RegionSelection(this);
     connect(m_regionPicker, &RegionSelection::finished, this, [this](QScreen *selectedScreen, const QRect &region) {
         if (!region.isEmpty() && selectedScreen) {
-            for (qsizetype i = 0; i < m_targets.size(); ++i) {
-                auto &target = m_targets[i];
-                if (target.isRegion && target.screen == selectedScreen) {
-                    target.region = region;
-                    target.regionScreenSize = selectedScreen->size();
-                    m_target->setCurrentIndex(int(i));
-                    break;
-                }
-            }
+            setRegion(selectedScreen, region);
             m_status->setText(QStringLiteral("영역을 선택했습니다. 미리보기 또는 녹화 시작을 누르세요."));
         } else m_status->setText(QStringLiteral("영역 선택을 취소했습니다. 기존 영역을 유지합니다."));
         updateRegionLabel();
@@ -571,12 +685,18 @@ void MainWindow::pickWindow() {
 
 void MainWindow::refreshAudio() {
     const auto previous = m_audio->currentData().toByteArray();
+    const QSignalBlocker audioSignals(m_audio);
     m_audio->clear();
     m_audio->addItem(QStringLiteral("녹음 안 함"), QByteArray());
     m_audioDevices = QMediaDevices::audioInputs();
     for (const auto &device : m_audioDevices) m_audio->addItem(device.description(), device.id());
     const auto index = m_audio->findData(previous);
     m_audio->setCurrentIndex(std::max(0, index));
+    m_audio->setToolTip(m_audio->currentText());
+    if (!previous.isEmpty() && index < 0) {
+        m_status->setText(QStringLiteral("선택한 오디오 장치가 없어 '녹음 안 함'으로 변경했습니다."));
+        savePreferences();
+    }
 }
 
 void MainWindow::begin(bool recording) {
@@ -588,14 +708,20 @@ void MainWindow::begin(bool recording) {
     if (target < 0 || target >= m_targets.size()) return;
     // A modal file dialog still processes screen removal and target-list refresh events.
     const auto selectedTarget = m_targets[target];
+    const auto selectedRegion = m_preferences.region;
     QString outputPath;
     if (recording) {
         const auto name = QStringLiteral("ClipDock_%1.mp4").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss")));
-        const auto folder = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+        const QFileInfo savedFolder(m_preferences.outputFolder);
+        const auto folder = !m_preferences.outputFolder.isEmpty() && savedFolder.isAbsolute()
+                && savedFolder.isDir() && savedFolder.isWritable()
+            ? m_preferences.outputFolder : QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
         outputPath = QFileDialog::getSaveFileName(this, QStringLiteral("녹화 파일 저장"),
             QDir(folder).filePath(name), QStringLiteral("MP4 동영상 (*.mp4)"), nullptr, QFileDialog::DontConfirmOverwrite);
         if (outputPath.isEmpty()) return;
         if (!outputPath.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive)) outputPath += QStringLiteral(".mp4");
+        m_preferences.outputFolder = QFileInfo(outputPath).absolutePath();
+        savePreferences();
     }
     RecordingOptions options;
     options.maxEdge = m_resolution->currentData().toInt();
@@ -604,7 +730,10 @@ void MainWindow::begin(bool recording) {
     options.microphone = recording && m_audio->currentIndex() > 0;
     const int audioIndex = m_audio->currentIndex() - 1;
     const auto audio = audioIndex >= 0 && audioIndex < m_audioDevices.size() ? m_audioDevices[audioIndex] : QAudioDevice();
-    if (!selectedTarget.isAvailable()) {
+    const bool regionSpaceChanged = selectedTarget.isRegion && (!selectedTarget.screen
+        || selectedRegion.screen.logicalSize != selectedTarget.screen->size()
+        || !qFuzzyCompare(selectedRegion.screen.devicePixelRatio, selectedTarget.screen->devicePixelRatio()));
+    if (!selectedTarget.isAvailable() || regionSpaceChanged) {
         showError(QStringLiteral("선택한 녹화 대상이 사라졌거나 변경되었습니다. 대상을 다시 선택하세요."));
         return;
     }
@@ -660,7 +789,8 @@ void MainWindow::updateState(RecorderController::State state) {
         && (!m_targets[index].isRegion || !m_targets[index].region.isEmpty());
     m_settings->setEnabled(idle);
     m_pickRegion->setEnabled(idle && index >= 0);
-    m_record->setEnabled((idle || preview) && hasTarget);
+    m_resetPreferences->setEnabled(idle);
+    m_record->setEnabled((idle || preview) && hasTarget && m_codec->currentIndex() >= 0);
     m_preview->setEnabled(idle && hasTarget);
     m_pause->setEnabled(state == State::Recording || state == State::Paused);
     m_pause->setText(state == State::Paused ? QStringLiteral("재개") : QStringLiteral("일시정지"));
