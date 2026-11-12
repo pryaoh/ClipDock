@@ -24,6 +24,9 @@ RecorderController::RecorderController(QObject *parent) : QObject(parent) {
     m_session.setRecorder(&m_recorder);
     m_captureSession.setVideoSink(&m_captureSink);
     connect(&m_captureSink, &QVideoSink::videoFrameChanged, this, &RecorderController::handleCapturedFrame);
+    connect(&m_windowBootstrap, &WindowCaptureBootstrap::frameReady, this, [this](const QImage &image) {
+        handleCapturedFrame(QVideoFrame(image));
+    });
     m_protectedCaptureTimer.setTimerType(Qt::PreciseTimer);
     connect(&m_protectedCaptureTimer, &QTimer::timeout, this, &RecorderController::captureProtectedFrame);
     m_frameTimer.setSingleShot(true);
@@ -47,6 +50,7 @@ RecorderController::RecorderController(QObject *parent) : QObject(parent) {
 }
 
 RecorderController::~RecorderController() {
+    m_windowBootstrap.stop();
     // MainWindow defers close until StoppedState, which means the container has been finalized.
     m_session.setRecorder(nullptr);
     m_captureSession.setScreenCapture(nullptr);
@@ -161,6 +165,9 @@ void RecorderController::activateCapture() {
         m_captureSession.setWindowCapture(&m_window);
         m_window.setWindow(m_target.window);
         m_window.start();
+#ifdef Q_OS_WIN
+        if (m_state == State::Starting && !m_latestFrame.isValid()) m_windowBootstrap.start(m_target.window);
+#endif
     } else {
         if (!m_target.isPortal && !m_target.screen) { fail(QStringLiteral("선택한 디스플레이가 연결되어 있지 않습니다.")); return; }
         m_captureSession.setScreenCapture(&m_screen);
@@ -177,6 +184,7 @@ void RecorderController::activateCapture() {
 void RecorderController::handleCapturedFrame(const QVideoFrame &frame) {
     if (m_protectedCapture) return; // Ignore queued frames from the former Qt capture source.
     if (!frame.isValid() || m_state == State::Idle || m_state == State::Stopping) return;
+    m_windowBootstrap.stop();
     if (m_target.isRegion && (!m_target.screen || m_target.screen->size() != m_target.regionScreenSize)) {
         fail(QStringLiteral("디스플레이 구성이 변경되었습니다. 녹화를 중지합니다. 영역을 다시 지정하세요."));
         return;
@@ -358,6 +366,7 @@ void RecorderController::togglePause() {
 }
 
 void RecorderController::stopCapture() {
+    m_windowBootstrap.stop();
     m_protectedCaptureTimer.stop();
     m_protectedCapture = false;
     m_startTimeout.stop();
