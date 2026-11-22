@@ -21,6 +21,8 @@
   Windows/Linux 물리 키보드와 Wayland 승인 UI 등 남은 검증은 이슈 #3에서 추적합니다.
 - [x] Windows 창 녹화의 정지 구간 시간 처리: 공통 FPS 스케줄러(`9517da1`)와 처음부터 정지된 창의 최초 프레임 수정(`dc5c15a`).
   2026-11-05 Windows 실제 창에서 정지 창·색상 전환 창 모두 설정 FPS와 녹화 시간대로 저장되는 것을 확인했습니다.
+  2026-11-22 `feat/recording-countdown`(`d4f7067`)에서 추가 6초 녹화 두 조건과 전체 29개 검사가 통과했습니다.
+  [6초 재검증 결과](testing.md#windows-창-녹화-6초-재검증-2026-11-22)를 참고하세요.
   [수정 기록](testing.md#windows-정지-창-최초-프레임-수정-2026-11-05)과
   [원인 확인 기록](testing.md#windows-정지-창-녹화-시간-원인-확인-2026-10-29)을 참고하세요.
 - [x] [설정·영역 복원 #2](https://github.com/pryaoh/ClipDock/issues/2): `feat/restore-recording-settings`에 구현.
