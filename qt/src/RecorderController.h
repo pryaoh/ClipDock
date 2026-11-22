@@ -27,7 +27,8 @@ class QVideoSink;
 class RecorderController final : public QObject {
     Q_OBJECT
 public:
-    enum class State { Idle, WaitingForPermission, Starting, Preview, Recording, Paused, Stopping };
+    // Countdown: capture, permissions and output checks are ready; the encoder has not started.
+    enum class State { Idle, WaitingForPermission, Starting, Countdown, Preview, Recording, Paused, Stopping };
     Q_ENUM(State)
     struct Target {
         QPointer<QScreen> screen;
@@ -50,10 +51,16 @@ public:
     void start(const Target &target, const RecordingOptions &options, const QAudioDevice &audio,
                QMediaFormat::VideoCodec codec, const QString &outputPath = {});
     void togglePause();
+    // During Countdown this cancels the pending start: back to Preview if it began there, otherwise Idle.
     void stop();
+    int countdownRemaining() const { return m_countdownRemaining; }
+    // Time between the end of the countdown and the encoder start, so that the countdown
+    // display, minimization and capture exclusion settle before the first recorded frame.
+    static constexpr int CountdownSettleMs = 300;
 
 signals:
     void recordingAboutToStart(); // Permissions, first frame and output preparation are complete.
+    void countdownChanged(int secondsRemaining); // 0 when the countdown has ended or was cancelled.
     void stateChanged(State state);
     void durationChanged(qint64 milliseconds);
     void statusChanged(const QString &message);
@@ -66,6 +73,9 @@ private:
     void completePermissionRequest(quint64 generation, bool hadPreview, bool granted);
     void activateCapture();
     void startWriter();
+    void beginCountdownOrWriter();
+    void advanceCountdown();
+    void cancelCountdown();
     void handleFrame(const QVideoFrame &frame);
     void handleCapturedFrame(const QVideoFrame &frame);
     void sendScheduledFrame();
@@ -110,5 +120,10 @@ private:
     bool m_failed = false;
     bool m_recorderFailed = false;
     bool m_writerStarted = false;
+    QTimer m_countdownTimer;
+    QElapsedTimer m_countdownClock;
+    int m_countdownRemaining = 0;
+    bool m_countdownFromPreview = false;
+    bool m_aboutToStartEmitted = false;
     quint64 m_generation = 0;
 };

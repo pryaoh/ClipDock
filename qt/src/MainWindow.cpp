@@ -240,6 +240,13 @@ MainWindow::MainWindow() {
     m_codec->addItem(QStringLiteral("H.264 · MP4"), static_cast<int>(QMediaFormat::VideoCodec::H264));
     m_codec->addItem(QStringLiteral("MPEG-4 · MP4 (호환 모드)"), static_cast<int>(QMediaFormat::VideoCodec::MPEG4));
     addField(QStringLiteral("비디오 코덱"), m_codec);
+    m_startDelay = new QComboBox;
+    m_startDelay->setObjectName(QStringLiteral("startDelayComboBox"));
+    for (int seconds : RecordingPreferences::startDelayChoices())
+        m_startDelay->addItem(seconds == 0 ? QStringLiteral("바로 시작") : QStringLiteral("%1초 후 시작").arg(seconds), seconds);
+    m_startDelay->setToolTip(QStringLiteral("권한 확인과 화면 준비가 끝난 뒤 카운트다운을 시작합니다.\n"
+                                            "카운트다운 중에는 Esc, '시작 취소' 또는 중지 단축키로 취소할 수 있습니다."));
+    addField(QStringLiteral("녹화 시작 지연"), m_startDelay);
     form->addWidget(separator());
     m_audio = new QComboBox;
     m_audio->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
@@ -313,7 +320,7 @@ MainWindow::MainWindow() {
     layout->addWidget(controls);
     setCentralWidget(central);
     const QList<QWidget *> focusOrder = {m_sourceType, m_target, m_pickWindow, m_pickRegion, refresh,
-        m_resolution, m_fps, m_bitrate, m_codec, m_audio, m_excludeSelf, m_minimizeRecording,
+        m_resolution, m_fps, m_bitrate, m_codec, m_startDelay, m_audio, m_excludeSelf, m_minimizeRecording,
         m_preview, m_record, m_pause, m_stop, m_reveal};
     for (qsizetype i = 1; i < focusOrder.size(); ++i)
         QWidget::setTabOrder(focusOrder[i - 1], focusOrder[i]);
@@ -355,6 +362,8 @@ MainWindow::MainWindow() {
                            "한 모니터 안에서 16 × 16 이상으로 선택하세요. 영역 안에 겹친 창도 녹화됩니다.\n\n"
                            "단축키 (전역 등록 상태는 도움말 → 단축키 상태에서 확인):\n"
                            "Ctrl/⌘+Shift+R 녹화 · Ctrl/⌘+Shift+P 일시정지 · Ctrl/⌘+Shift+S 중지\n\n"
+                           "녹화 시작 지연: 3초·5초를 고르면 화면 준비 뒤 카운트다운이 끝나야 녹화가 시작됩니다.\n"
+                           "카운트다운 중 Esc·'시작 취소'·중지 단축키로 취소하면 파일을 만들지 않습니다.\n\n"
                            "macOS: 화면 기록 권한을 허용한 뒤 재실행하세요.\n"
                            "Linux X11: 화면·창 목록 또는 영역 지정을 사용하세요.\n"
                            "Linux Wayland: 시작 시 시스템 공유 창에서 대상을 선택하고 공유를 허용하세요.\n"
@@ -369,7 +378,7 @@ MainWindow::MainWindow() {
         refreshTargets();
         savePreferences();
     });
-    for (auto *combo : {m_resolution, m_fps, m_codec, m_audio})
+    for (auto *combo : {m_resolution, m_fps, m_codec, m_startDelay, m_audio})
         connect(combo, &QComboBox::currentIndexChanged, this, &MainWindow::savePreferences);
     connect(m_bitrate, &QSpinBox::valueChanged, this, &MainWindow::savePreferences);
     connect(m_target, &QComboBox::currentIndexChanged, this, [this] {
@@ -398,6 +407,14 @@ MainWindow::MainWindow() {
         m_controller.togglePause();
     });
     connect(m_stop, &QPushButton::clicked, &m_controller, &RecorderController::stop);
+    m_cancelCountdown = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    m_cancelCountdown->setEnabled(false);
+    connect(m_cancelCountdown, &QShortcut::activated, this, [this] {
+        if (m_captureState == RecorderController::State::Countdown) m_controller.stop();
+    });
+    connect(&m_controller, &RecorderController::countdownChanged, this, [this] {
+        if (m_captureState == RecorderController::State::Countdown) updateState(m_captureState);
+    });
     connect(m_reveal, &QPushButton::clicked, this, [this] {
         QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(m_lastFile).absolutePath()));
     });
@@ -468,6 +485,7 @@ void MainWindow::restorePreferences() {
     m_resolution->setCurrentIndex(m_resolution->findData(m_preferences.options.maxEdge));
     m_fps->setCurrentIndex(m_fps->findData(m_preferences.options.fps));
     m_bitrate->setValue(m_preferences.options.bitrateKbps);
+    m_startDelay->setCurrentIndex(std::max(0, m_startDelay->findData(m_preferences.options.startDelaySeconds)));
     if (auto *model = qobject_cast<QStandardItemModel *>(m_codec->model()))
         for (int i = 0; i < m_codec->count(); ++i)
             model->item(i)->setEnabled(codecs.contains(static_cast<QMediaFormat::VideoCodec>(m_codec->itemData(i).toInt())));
@@ -488,6 +506,7 @@ void MainWindow::savePreferences() {
     m_preferences.options.maxEdge = m_resolution->currentData().toInt();
     m_preferences.options.fps = m_fps->currentData().toInt();
     m_preferences.options.bitrateKbps = m_bitrate->value();
+    m_preferences.options.startDelaySeconds = m_startDelay->currentData().toInt();
     m_preferences.codec = m_codec->currentIndex() < 0 ? QMediaFormat::VideoCodec::Unspecified
         : static_cast<QMediaFormat::VideoCodec>(m_codec->currentData().toInt());
     m_preferences.audioId = m_audio->currentData().toByteArray();
@@ -728,6 +747,7 @@ void MainWindow::begin(bool recording) {
     options.fps = m_fps->currentData().toInt();
     options.bitrateKbps = m_bitrate->value();
     options.microphone = recording && m_audio->currentIndex() > 0;
+    options.startDelaySeconds = recording ? m_startDelay->currentData().toInt() : 0;
     const int audioIndex = m_audio->currentIndex() - 1;
     const auto audio = audioIndex >= 0 && audioIndex < m_audioDevices.size() ? m_audioDevices[audioIndex] : QAudioDevice();
     const bool regionSpaceChanged = selectedTarget.isRegion && (!selectedTarget.screen
@@ -796,13 +816,21 @@ void MainWindow::updateState(RecorderController::State state) {
     m_pause->setText(state == State::Paused ? QStringLiteral("재개") : QStringLiteral("일시정지"));
     m_pause->setIcon(UiTheme::icon(state == State::Paused ? UiTheme::Icon::Play : UiTheme::Icon::Pause));
     m_stop->setEnabled(!idle && state != State::Stopping);
-    m_stop->setText(preview ? QStringLiteral("미리보기 종료") : QStringLiteral("중지 및 저장"));
+    const bool countdown = state == State::Countdown;
+    const int remaining = m_controller.countdownRemaining();
+    m_stop->setText(countdown ? QStringLiteral("시작 취소")
+        : preview ? QStringLiteral("미리보기 종료") : QStringLiteral("중지 및 저장"));
+    m_record->setText(countdown ? QStringLiteral("%1초 후 시작").arg(remaining) : QStringLiteral("녹화 시작"));
+    m_cancelCountdown->setEnabled(countdown);
+    // The title stays visible in the taskbar/Dock while the user moves to another app.
+    setWindowTitle(countdown ? QStringLiteral("ClipDock · %1초 후 녹화").arg(remaining) : QStringLiteral("ClipDock"));
 
     QString badge, tone;
     switch (state) {
     case State::Idle: badge = QStringLiteral("대기 중"); break;
     case State::WaitingForPermission: badge = QStringLiteral("권한 확인 중"); tone = QStringLiteral("active"); break;
     case State::Starting: badge = QStringLiteral("준비 중"); tone = QStringLiteral("active"); break;
+    case State::Countdown: badge = QStringLiteral("시작까지 %1초").arg(remaining); tone = QStringLiteral("active"); break;
     case State::Preview: badge = QStringLiteral("미리보기 중"); tone = QStringLiteral("active"); break;
     case State::Recording: badge = QStringLiteral("녹화 중"); tone = QStringLiteral("recording"); break;
     case State::Paused: badge = QStringLiteral("일시정지"); tone = QStringLiteral("paused"); break;
@@ -906,7 +934,8 @@ void MainWindow::minimizeForRecording() {
 
 void MainWindow::updatePreview() {
     using State = RecorderController::State;
-    const bool live = m_captureState == State::Preview || m_captureState == State::Recording
+    const bool live = m_captureState == State::Preview || m_captureState == State::Countdown
+        || m_captureState == State::Recording
         || m_captureState == State::Paused || m_captureState == State::Stopping;
     const bool feedback = live && !m_captureExcluded && overlapsCapture();
     m_previewStack->setCurrentIndex(live && !feedback ? 1 : 0);
@@ -930,4 +959,6 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     m_closing = true;
     event->ignore();
     m_controller.stop();
+    // Cancelling a countdown that began from a preview returns to the preview; end that as well.
+    if (m_controller.state() == RecorderController::State::Preview) m_controller.stop();
 }

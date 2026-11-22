@@ -10,6 +10,8 @@ struct RecordingOptions {
     int fps = 25;
     int bitrateKbps = 5000;
     bool microphone = false;
+    // Seconds between a fully prepared capture and the first recorded frame.
+    int startDelaySeconds = 0;
 
     std::optional<std::string> validate() const {
         if (maxEdge < 16 || maxEdge > 4096)
@@ -18,6 +20,8 @@ struct RecordingOptions {
             return "FPS는 1~60이어야 합니다.";
         if (bitrateKbps < 100 || bitrateKbps > 100000)
             return "비트레이트는 100~100000 kbps이어야 합니다.";
+        if (startDelaySeconds < 0 || startDelaySeconds > 10)
+            return "시작 지연은 0~10초여야 합니다.";
         return std::nullopt;
     }
 

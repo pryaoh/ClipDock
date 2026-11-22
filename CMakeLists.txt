@@ -221,6 +221,8 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME recorder_lifecycle COMMAND recorder_lifecycle_tests)
     set_tests_properties(recorder_lifecycle PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME recorder_countdown COMMAND recorder_lifecycle_tests --countdown)
+    set_tests_properties(recorder_countdown PROPERTIES TIMEOUT 40 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     qt_add_executable(window_picker_tests qt/tests/WindowPickerTests.cpp
         qt/src/WindowPicker.cpp qt/src/WindowPicker.h qt/src/NativeWindowPicker.cpp)

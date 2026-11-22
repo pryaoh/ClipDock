@@ -35,6 +35,9 @@ RecorderController::RecorderController(QObject *parent) : QObject(parent) {
     connect(&m_frameInput, &QVideoFrameInput::readyToSendVideoFrame, this, [this] {
         if (!m_frameTimer.isActive()) sendScheduledFrame();
     }, Qt::QueuedConnection);
+    m_countdownTimer.setSingleShot(true);
+    m_countdownTimer.setTimerType(Qt::PreciseTimer);
+    connect(&m_countdownTimer, &QTimer::timeout, this, &RecorderController::advanceCountdown);
     m_startTimeout.setSingleShot(true);
     m_startTimeout.setInterval(20000);
     connect(&m_startTimeout, &QTimer::timeout, this, [this] {
@@ -98,6 +101,18 @@ void RecorderController::start(const Target &target, const RecordingOptions &opt
         emit errorOccurred(QStringLiteral("사용 가능한 오디오 입력 장치가 없습니다."));
         return;
     }
+    if (!outputPath.isEmpty()) {
+        // Reject what is already known before permission prompts and the start countdown.
+        if (!recordingFormat(codec, options.microphone).isSupported(QMediaFormat::Encode)) {
+            emit errorOccurred(QStringLiteral("이 환경에서 선택한 MP4 코덱을 사용할 수 없습니다. 다른 코덱을 선택하세요."));
+            return;
+        }
+        const QFileInfo folder(QFileInfo(outputPath).absolutePath());
+        if (!folder.isDir() || !folder.isWritable()) {
+            emit errorOccurred(QStringLiteral("저장 폴더에 쓸 수 없습니다. 다른 폴더를 선택하세요."));
+            return;
+        }
+    }
     m_options = options;
     m_audioDevice = audio;
     m_codec = codec;
@@ -105,7 +120,10 @@ void RecorderController::start(const Target &target, const RecordingOptions &opt
     m_failed = false;
     m_recorderFailed = false;
     m_writerStarted = false;
+    m_aboutToStartEmitted = false;
+    m_countdownRemaining = 0;
     const bool hadPreview = m_state == State::Preview;
+    m_countdownFromPreview = hadPreview;
     if (!hadPreview) {
         m_target = target;
         m_sourceSize = {};
@@ -147,7 +165,7 @@ void RecorderController::completePermissionRequest(quint64 generation, bool hadP
         return;
     }
     setState(State::Starting);
-    if (hadPreview) startWriter();
+    if (hadPreview) beginCountdownOrWriter();
     else activateCapture();
 }
 
@@ -294,12 +312,82 @@ void RecorderController::handleFrame(const QVideoFrame &frame) {
     if (m_outputPath.isEmpty()) {
         setState(State::Preview);
         emit statusChanged(QStringLiteral("미리보기 중 · 파일은 저장되지 않습니다."));
-    } else startWriter();
+    } else beginCountdownOrWriter();
+}
+
+void RecorderController::beginCountdownOrWriter() {
+    // Frames that arrive while the post-countdown settle delay runs must not restart it.
+    if (m_state != State::Starting || m_writerStarted || m_aboutToStartEmitted) return;
+    m_startTimeout.stop();
+    if (m_outputPath.isEmpty() || m_options.startDelaySeconds <= 0) { startWriter(); return; }
+    // Permissions and the first frame are ready, so waiting for them never consumes the countdown.
+    m_countdownRemaining = m_options.startDelaySeconds;
+    setState(State::Countdown);
+    if (m_state != State::Countdown) return;
+    m_countdownClock.start();
+    m_countdownTimer.start(1000);
+    emit countdownChanged(m_countdownRemaining);
+    emit statusChanged(QStringLiteral("%1초 후 녹화를 시작합니다 · Esc 또는 '시작 취소'로 취소").arg(m_countdownRemaining));
+}
+
+void RecorderController::advanceCountdown() {
+    if (m_state != State::Countdown) return;
+    if (!m_target.isAvailable()) {
+        fail(QStringLiteral("녹화 대상이 사라졌거나 변경되어 녹화를 시작하지 않았습니다. 대상을 다시 선택하세요."));
+        return;
+    }
+    // Absolute deadlines keep the total delay exact even when a timer fires late.
+    const qint64 remainingMs = qint64(m_options.startDelaySeconds) * 1000 - m_countdownClock.elapsed();
+    if (remainingMs > 0) {
+        const int seconds = int((remainingMs + 999) / 1000);
+        m_countdownTimer.start(int(qMax<qint64>(1, remainingMs - qint64(seconds - 1) * 1000)));
+        if (seconds != m_countdownRemaining) {
+            m_countdownRemaining = seconds;
+            emit countdownChanged(seconds);
+            emit statusChanged(QStringLiteral("%1초 후 녹화를 시작합니다 · Esc 또는 '시작 취소'로 취소").arg(seconds));
+        }
+        return;
+    }
+    m_countdownRemaining = 0;
+    const auto generation = m_generation;
+    setState(State::Starting);
+    emit countdownChanged(0);
+    emit statusChanged(QStringLiteral("녹화 시작 중…"));
+    if (generation != m_generation || m_state != State::Starting) return;
+    // Hide the countdown and apply minimization/exclusion first, then let the capture
+    // deliver frames of the settled screen before the encoder takes its first frame.
+    m_aboutToStartEmitted = true;
+    emit recordingAboutToStart();
+    if (generation != m_generation || m_state != State::Starting) return;
+    QTimer::singleShot(CountdownSettleMs, this, [this, generation] {
+        if (generation == m_generation && m_state == State::Starting) startWriter();
+    });
+}
+
+void RecorderController::cancelCountdown() {
+    m_countdownTimer.stop();
+    ++m_generation;
+    m_countdownRemaining = 0;
+    m_outputPath.clear(); // No temporary file exists yet; startWriter() has not run.
+    if (m_countdownFromPreview) {
+        setState(State::Preview);
+        emit countdownChanged(0);
+        emit statusChanged(QStringLiteral("녹화 시작을 취소했습니다 · 미리보기를 계속합니다."));
+        return;
+    }
+    stopCapture();
+    setState(State::Idle);
+    emit countdownChanged(0);
+    emit statusChanged(QStringLiteral("녹화 시작을 취소했습니다."));
 }
 
 void RecorderController::startWriter() {
     if (m_writerStarted || m_state != State::Starting) return;
     m_startTimeout.stop();
+    if (!m_target.isAvailable()) {
+        fail(QStringLiteral("녹화 대상이 사라졌거나 변경되었습니다. 대상을 다시 선택하세요."));
+        return;
+    }
     const auto [width, height] = m_options.fittedSize(m_sourceSize.width(), m_sourceSize.height());
     if (width == 0) { fail(QStringLiteral("캡처 프레임의 크기를 확인할 수 없습니다.")); return; }
     if (!recordingFormat(m_codec, m_options.microphone).isSupported(QMediaFormat::Encode)) {
@@ -317,7 +405,10 @@ void RecorderController::startWriter() {
     configureRecorder(m_recorder, m_options, QSize(width, height), m_codec);
     m_session.setVideoFrameInput(&m_frameInput);
     m_recorder.setOutputLocation(QUrl::fromLocalFile(m_temporary->fileName()));
-    emit recordingAboutToStart();
+    if (!m_aboutToStartEmitted) {
+        m_aboutToStartEmitted = true;
+        emit recordingAboutToStart();
+    }
     if (m_state != State::Starting || m_writerStarted) return;
     m_protectedCapture = X11Capture::available() && !m_target.isWindow && !m_target.isPortal
         && m_excludedWindows && !m_excludedWindows().isEmpty();
@@ -369,6 +460,8 @@ void RecorderController::stopCapture() {
     m_windowBootstrap.stop();
     m_protectedCaptureTimer.stop();
     m_protectedCapture = false;
+    m_countdownTimer.stop();
+    m_countdownRemaining = 0;
     m_startTimeout.stop();
     m_frameTimer.stop();
     disconnect(m_regionGeometryConnection);
@@ -384,6 +477,7 @@ void RecorderController::stopCapture() {
 
 void RecorderController::stop() {
     if (m_state == State::Idle || m_state == State::Stopping) return;
+    if (m_state == State::Countdown && !m_failed) { cancelCountdown(); return; }
     ++m_generation;
     setState(State::Stopping);
     m_frameTimer.stop();
@@ -428,7 +522,8 @@ void RecorderController::finish() {
     }
     if (!completionStatus.isEmpty()) emit statusChanged(completionStatus);
     else if (m_failed) emit statusChanged(QStringLiteral("작업 실패 · 오류 내용을 확인하세요."));
-    else if (!recorded) emit statusChanged(QStringLiteral("미리보기 종료"));
+    else if (!recorded) emit statusChanged(m_outputPath.isEmpty() ? QStringLiteral("미리보기 종료")
+                                                                  : QStringLiteral("녹화 시작을 취소했습니다."));
     m_temporary.reset();
     m_outputPath.clear();
     setState(State::Idle);
