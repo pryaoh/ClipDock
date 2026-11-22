@@ -24,6 +24,8 @@ public:
                                     bool fromPreview = true) {
         controller.m_options = {};
         controller.m_options.startDelaySeconds = startDelay;
+        // Linux CI's FFmpeg has no H.264 encoder; MPEG-4 is available on every platform.
+        controller.m_codec = QMediaFormat::VideoCodec::MPEG4;
         controller.m_countdownFromPreview = fromPreview;
         controller.m_aboutToStartEmitted = false;
         controller.m_writerStarted = false;
@@ -119,7 +121,7 @@ static void checkCountdown(QScreen *screen) {
         const auto countdownGeneration = RecorderControllerTestPeer::generation(controller);
         RecorderController::Target target;
         target.screen = screen;
-        controller.start(target, {}, {}, QMediaFormat::VideoCodec::H264, directory.filePath(QStringLiteral("again.mp4")));
+        controller.start(target, {}, {}, QMediaFormat::VideoCodec::MPEG4, directory.filePath(QStringLiteral("again.mp4")));
         check(controller.state() == State::Countdown
                   && RecorderControllerTestPeer::generation(controller) == countdownGeneration,
               "a repeated start request during the countdown is ignored");
@@ -192,11 +194,11 @@ static void checkCountdown(QScreen *screen) {
         target.screen = screen;
         RecordingOptions options;
         options.startDelaySeconds = 3;
-        controller.start(target, options, {}, QMediaFormat::VideoCodec::H264,
+        controller.start(target, options, {}, QMediaFormat::VideoCodec::MPEG4,
                          directory.filePath(QStringLiteral("missing/folder/out.mp4")));
         check(errors == 1 && controller.state() == State::Idle, "unwritable output folder is rejected immediately");
         options.startDelaySeconds = 11;
-        controller.start(target, options, {}, QMediaFormat::VideoCodec::H264, directory.filePath(QStringLiteral("x.mp4")));
+        controller.start(target, options, {}, QMediaFormat::VideoCodec::MPEG4, directory.filePath(QStringLiteral("x.mp4")));
         check(errors == 2 && controller.state() == State::Idle, "out-of-range start delay is rejected");
     }
     std::cout << "PASS: countdown permission wait, single start, settled first frame, cancellation, target loss\n";
