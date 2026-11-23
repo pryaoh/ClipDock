@@ -39,6 +39,7 @@ public:
         controller.m_target = target;
         controller.m_outputPath = recording ? QStringLiteral("synthetic.mp4") : QString();
     }
+    static void setCountdown(RecorderController &controller, int seconds) { controller.m_countdownRemaining = seconds; }
 };
 
 class MainWindowTestPeer {
@@ -69,6 +70,7 @@ public:
             original.m_resolution->setCurrentIndex(original.m_resolution->findData(2560));
             original.m_fps->setCurrentIndex(original.m_fps->findData(60));
             original.m_bitrate->setValue(12345);
+            original.m_startDelay->setCurrentIndex(original.m_startDelay->findData(5));
             original.m_sourceType->setCurrentIndex(2);
             original.setRegion(screen, region);
             original.m_sourceType->setCurrentIndex(0);
@@ -82,6 +84,7 @@ public:
                   "output size survives window recreation");
             check(restored.m_fps->currentData().toInt() == 60 && restored.m_bitrate->value() == 12345,
                   "FPS and bitrate survive window recreation");
+            check(restored.m_startDelay->currentData().toInt() == 5, "start delay survives window recreation");
             const auto target = restored.m_targets.value(restored.m_target->currentIndex());
             check(restored.m_sourceType->currentIndex() == 2 && target.screen == screen
                   && target.region == region && target.isAvailable(), "last monitor and local region survive recreation");
@@ -100,6 +103,7 @@ public:
             check(restored.m_fps->currentData().toInt() == 25 && restored.m_bitrate->value() == 5000
                   && restored.m_resolution->currentData().toInt() == 1920 && restored.m_audio->currentIndex() == 0,
                   "reset immediately restores defaults");
+            check(restored.m_startDelay->currentData().toInt() == 0, "reset restores an immediate start");
             check(restored.m_excludeSelf->isChecked() && !restored.m_minimizeRecording->isChecked(),
                   "reset restores capture policy defaults");
             restored.m_sourceType->setCurrentIndex(2);
@@ -114,6 +118,13 @@ public:
             restored.m_sourceType->setCurrentIndex(2);
             restored.setRegion(screen, region);
         }
+        QSettings().setValue(QStringLiteral("recording/startDelaySeconds"), 4);
+        {
+            MainWindow invalid;
+            check(invalid.m_startDelay->currentData().toInt() == 0 && invalid.m_preferences.usedFallback,
+                  "an unsupported stored start delay falls back to an immediate start");
+        }
+        QSettings().remove(QStringLiteral("recording/startDelaySeconds"));
         QSettings().setValue(QStringLiteral("lastRegion/devicePixelRatio"), screen->devicePixelRatio() + 0.5);
         {
             MainWindow changed;
@@ -378,6 +389,31 @@ public:
         window.dispatchShortcut(ShortcutAction::Pause);
         window.dispatchShortcut(ShortcutAction::Stop);
         check(pauses == 1 && stops == 0, "finalization rejects repeated capture commands");
+        int records = 0;
+        const auto recordConnection = QObject::connect(window.m_record, &QPushButton::clicked, [&] { ++records; });
+        RecorderControllerTestPeer::setCountdown(window.m_controller, 3);
+        window.updateState(State::Countdown);
+        window.dispatchShortcut(ShortcutAction::Record);
+        window.dispatchShortcut(ShortcutAction::Pause);
+        check(records == 0 && pauses == 1, "countdown blocks repeated start and pause commands");
+        check(!window.m_record->isEnabled() && window.m_record->text().contains(QStringLiteral("3초"))
+                  && window.m_stop->isEnabled() && window.m_stop->text() == QStringLiteral("시작 취소")
+                  && window.m_cancelCountdown->isEnabled() && !window.m_settings->isEnabled(),
+              "countdown shows the remaining time and offers cancel (button and Esc)");
+        check(window.windowTitle().contains(QStringLiteral("3초")) && window.m_stateBadge->text().contains(QStringLiteral("3초")),
+              "remaining time is visible in the taskbar title and status badge");
+        RecorderControllerTestPeer::setCountdown(window.m_controller, 2);
+        emit window.m_controller.countdownChanged(2);
+        check(window.m_stateBadge->text().contains(QStringLiteral("2초")) && window.windowTitle().contains(QStringLiteral("2초")),
+              "each countdown tick refreshes the display");
+        window.dispatchShortcut(ShortcutAction::Stop);
+        check(stops == 1, "stop shortcut cancels the countdown");
+        RecorderControllerTestPeer::setCountdown(window.m_controller, 0);
+        window.updateState(State::Idle);
+        check(window.windowTitle() == QStringLiteral("ClipDock") && !window.m_cancelCountdown->isEnabled()
+                  && window.m_record->text() == QStringLiteral("녹화 시작"),
+              "leaving the countdown restores the title, record label and Esc behaviour");
+        QObject::disconnect(recordConnection);
         QObject::disconnect(pauseConnection); QObject::disconnect(stopConnection);
         window.updateState(State::Idle);
     }

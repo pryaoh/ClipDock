@@ -13,6 +13,7 @@ class QLabel;
 class QVideoWidget;
 class QStackedWidget;
 class QCloseEvent;
+class QShortcut;
 class QWidget;
 class WindowPicker;
 class RegionSelection;
@@ -64,6 +65,8 @@ private:
     QComboBox *m_fps = nullptr;
     QComboBox *m_audio = nullptr;
     QComboBox *m_codec = nullptr;
+    QComboBox *m_startDelay = nullptr;
+    QShortcut *m_cancelCountdown = nullptr;
     QSpinBox *m_bitrate = nullptr;
     QCheckBox *m_excludeSelf = nullptr;
     QCheckBox *m_minimizeRecording = nullptr;

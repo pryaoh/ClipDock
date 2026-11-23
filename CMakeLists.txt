@@ -168,9 +168,10 @@ if(BUILD_TESTING)
         if(CLIPDOCK_DESKTOP_TESTS)
             add_test(NAME windows_static_window COMMAND windows_window_recording_tests)
             add_test(NAME windows_static_window_fps60 COMMAND windows_window_recording_tests --fps60)
+            add_test(NAME windows_static_window_countdown COMMAND windows_window_recording_tests --countdown)
             add_test(NAME windows_window_transition COMMAND windows_window_recording_tests --pulse)
             add_test(NAME windows_window_bootstrap_cancel COMMAND windows_window_recording_tests --cancel-restart)
-            set_tests_properties(windows_static_window windows_static_window_fps60 windows_window_transition windows_window_bootstrap_cancel
+            set_tests_properties(windows_static_window windows_static_window_fps60 windows_static_window_countdown windows_window_transition windows_window_bootstrap_cancel
                 PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE LABELS desktop
                 ENVIRONMENT "QT_QPA_PLATFORM=windows;QT_MEDIA_BACKEND=ffmpeg")
         endif()
@@ -221,6 +222,8 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME recorder_lifecycle COMMAND recorder_lifecycle_tests)
     set_tests_properties(recorder_lifecycle PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME recorder_countdown COMMAND recorder_lifecycle_tests --countdown)
+    set_tests_properties(recorder_countdown PROPERTIES TIMEOUT 40 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     qt_add_executable(window_picker_tests qt/tests/WindowPickerTests.cpp
         qt/src/WindowPicker.cpp qt/src/WindowPicker.h qt/src/NativeWindowPicker.cpp)

@@ -54,6 +54,10 @@ RecordingPreferences RecordingPreferences::load(QSettings &store, const QList<QM
         result.options.fps = 25; result.usedFallback = true;
     }
     result.options.bitrateKbps = integer(QStringLiteral("recording/bitrateKbps"), 5000, 100, 100000);
+    result.options.startDelaySeconds = integer(QStringLiteral("recording/startDelaySeconds"), 0, 0, 10);
+    if (!startDelayChoices().contains(result.options.startDelaySeconds)) {
+        result.options.startDelaySeconds = 0; result.usedFallback = true;
+    }
     const auto codec = static_cast<QMediaFormat::VideoCodec>(integer(QStringLiteral("recording/codec"),
         int(QMediaFormat::VideoCodec::H264), -1, 100));
     // Restrict to the two MP4 codecs exposed by the application, even if the backend offers more.
@@ -93,6 +97,7 @@ void RecordingPreferences::save(QSettings &store) const {
     store.setValue(QStringLiteral("recording/maxEdge"), options.maxEdge);
     store.setValue(QStringLiteral("recording/fps"), options.fps);
     store.setValue(QStringLiteral("recording/bitrateKbps"), options.bitrateKbps);
+    store.setValue(QStringLiteral("recording/startDelaySeconds"), options.startDelaySeconds);
     store.setValue(QStringLiteral("recording/codec"), int(codec));
     store.setValue(QStringLiteral("recording/audioId"), audioId);
     store.setValue(QStringLiteral("recording/outputFolder"), outputFolder);

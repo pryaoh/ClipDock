@@ -36,6 +36,9 @@ struct RecordingPreferences {
     SavedRegion region;
     bool usedFallback = false;
 
+    // Start delays offered in the UI; anything else in the store falls back to no delay.
+    static QList<int> startDelayChoices() { return {0, 3, 5}; }
+
     static RecordingPreferences load(QSettings &store, const QList<QMediaFormat::VideoCodec> &codecs,
                                      const QList<QByteArray> &audioIds);
     void save(QSettings &store) const;
