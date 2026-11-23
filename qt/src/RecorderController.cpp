@@ -121,6 +121,7 @@ void RecorderController::start(const Target &target, const RecordingOptions &opt
     m_recorderFailed = false;
     m_writerStarted = false;
     m_aboutToStartEmitted = false;
+    m_waitingForCountdownFrame = false;
     m_countdownRemaining = 0;
     const bool hadPreview = m_state == State::Preview;
     m_countdownFromPreview = hadPreview;
@@ -309,7 +310,10 @@ void RecorderController::handleFrame(const QVideoFrame &frame) {
     m_sourceSize = frame.size();
     if (m_state != State::Starting || m_writerStarted) return;
     m_startTimeout.stop();
-    if (m_outputPath.isEmpty()) {
+    if (m_waitingForCountdownFrame) {
+        m_waitingForCountdownFrame = false;
+        startWriter();
+    } else if (m_outputPath.isEmpty()) {
         setState(State::Preview);
         emit statusChanged(QStringLiteral("미리보기 중 · 파일은 저장되지 않습니다."));
     } else beginCountdownOrWriter();
@@ -360,7 +364,24 @@ void RecorderController::advanceCountdown() {
     emit recordingAboutToStart();
     if (generation != m_generation || m_state != State::Starting) return;
     QTimer::singleShot(CountdownSettleMs, this, [this, generation] {
-        if (generation == m_generation && m_state == State::Starting) startWriter();
+        if (generation != m_generation || m_state != State::Starting) return;
+        // A delay alone cannot establish that capture has advanced. Discard
+        // countdown/transition images and wait for a frame delivered after it.
+        m_latestFrame = {};
+        m_latestImage = {};
+        if (X11Capture::available() && !m_target.isWindow && !m_target.isPortal
+            && m_excludedWindows && !m_excludedWindows().isEmpty()) {
+            // This path acquires its own checked frames; Qt input is detached.
+            startWriter();
+            return;
+        }
+        m_waitingForCountdownFrame = true;
+        m_startTimeout.start();
+#ifdef Q_OS_WIN
+        // A static window may never produce another Qt update. Reacquire its
+        // current OS image rather than reuse a pre-countdown bootstrap frame.
+        if (m_target.isWindow) m_windowBootstrap.start(m_target.window);
+#endif
     });
 }
 
@@ -457,6 +478,7 @@ void RecorderController::togglePause() {
 }
 
 void RecorderController::stopCapture() {
+    m_waitingForCountdownFrame = false;
     m_windowBootstrap.stop();
     m_protectedCaptureTimer.stop();
     m_protectedCapture = false;

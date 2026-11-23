@@ -7,8 +7,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QMediaPlayer>
 #include <QScreen>
 #include <QTemporaryDir>
+#include <QUrl>
 #include <cstdlib>
 #include <iostream>
 
@@ -54,6 +56,7 @@ public:
         return controller.m_latestFrame.toImage().pixelColor(0, 0);
     }
     static void removeScreen(RecorderController &controller) { controller.m_target.screen.clear(); }
+    static void shortenStartTimeout(RecorderController &controller) { controller.m_startTimeout.setInterval(100); }
     static QString seedPartialFile(RecorderController &controller, const QString &folder) {
         controller.m_temporary = std::make_unique<QTemporaryFile>(folder + "/.clipdock-XXXXXX.mp4");
         check(controller.m_temporary->open(), "create partial recording");
@@ -103,8 +106,6 @@ static void checkCountdown(QScreen *screen) {
         QObject::connect(&controller, &RecorderController::saved, [&](const QString &) { saved = true; });
         QObject::connect(&controller, &RecorderController::recordingAboutToStart, [&] {
             ++aboutToStart;
-            // The capture delivers the screen after the countdown display is hidden/minimized.
-            RecorderControllerTestPeer::frame(controller, settledFrame, false);
         });
         const auto output = directory.filePath(QStringLiteral("countdown.mp4"));
         const auto generation = RecorderControllerTestPeer::waitForPermission(controller, screen, output, false, 2);
@@ -126,7 +127,15 @@ static void checkCountdown(QScreen *screen) {
                   && RecorderControllerTestPeer::generation(controller) == countdownGeneration,
               "a repeated start request during the countdown is ignored");
         check(filesIn(directory.path()).isEmpty(), "countdown creates no files");
-        check(waitUntil([&] { return RecorderControllerTestPeer::writerStarted(controller); }, 4000),
+        check(waitUntil([&] { return aboutToStart == 1; }, 4000), "countdown prepares the screen before encoding");
+        // Capture can stall or deliver a countdown-era image during minimization.
+        // Neither the cached image nor an image from inside the settle interval is safe.
+        RecorderControllerTestPeer::frame(controller, countdownFrame, false);
+        waitUntil([] { return false; }, RecorderController::CountdownSettleMs + 150);
+        check(!RecorderControllerTestPeer::writerStarted(controller) && filesIn(directory.path()).isEmpty(),
+              "countdown waits for a fresh post-settle frame without creating a file");
+        RecorderControllerTestPeer::frame(controller, settledFrame, false);
+        check(waitUntil([&] { return RecorderControllerTestPeer::writerStarted(controller); }, 1000),
               "recording starts after the countdown");
         const auto elapsed = clock.elapsed();
         check(elapsed >= 2000 + RecorderController::CountdownSettleMs - 20 && elapsed < 3200,
@@ -142,6 +151,25 @@ static void checkCountdown(QScreen *screen) {
         check(errors.isEmpty(), "countdown recording reports no errors");
         check(saved && filesIn(directory.path()) == QStringList{QStringLiteral("countdown.mp4")},
               "exactly one recording file is saved");
+        QMediaPlayer player;
+        QVideoSink decoded;
+        player.setVideoSink(&decoded);
+        int decodedFrames = 0;
+        bool stalePixels = false;
+        QObject::connect(&decoded, &QVideoSink::videoFrameChanged, [&](const QVideoFrame &frame) {
+            if (!frame.isValid()) return;
+            const QImage image = frame.toImage();
+            check(!image.isNull(), "countdown recording decodes into an image");
+            const auto color = image.pixelColor(image.width() / 2, image.height() / 2);
+            stalePixels |= color.green() < 180 || color.red() > 60 || color.blue() > 60;
+            ++decodedFrames;
+        });
+        player.setSource(QUrl::fromLocalFile(output));
+        player.play();
+        check(waitUntil([&] { return player.mediaStatus() == QMediaPlayer::EndOfMedia; }, 5000),
+              "countdown recording decodes to the end");
+        check(decodedFrames > 0 && !stalePixels, "every recorded frame excludes countdown-era pixels");
+        player.stop();
     }
 
     for (bool fromPreview : {true, false}) {   // Cancellation returns to the prior waiting state.
@@ -168,6 +196,35 @@ static void checkCountdown(QScreen *screen) {
         check(filesIn(directory.path()).isEmpty(), "a cancelled countdown leaves no file");
         controller.stop();
         check(controller.state() == State::Idle, "preview can still be ended after cancel");
+    }
+
+    for (bool timeout : {false, true}) { // Cancel/timeout while waiting for the fresh post-countdown image.
+        QTemporaryDir directory;
+        RecorderController controller;
+        int errors = 0, prepared = 0;
+        QObject::connect(&controller, &RecorderController::errorOccurred, [&](const QString &) { ++errors; });
+        QObject::connect(&controller, &RecorderController::recordingAboutToStart, [&] {
+            ++prepared;
+            if (timeout) RecorderControllerTestPeer::shortenStartTimeout(controller);
+        });
+        const auto generation = RecorderControllerTestPeer::waitForPermission(
+            controller, screen, directory.filePath(QStringLiteral("waiting.mp4")), false, 1);
+        RecorderControllerTestPeer::frame(controller, countdownFrame, false);
+        RecorderControllerTestPeer::answer(controller, generation, true);
+        check(waitUntil([&] { return prepared == 1; }, 2000), "fresh-frame wait follows the countdown");
+        if (timeout) {
+            check(waitUntil([&] { return controller.state() == State::Idle; }, 2000),
+                  "missing post-countdown frame times out");
+        } else {
+            waitUntil([] { return false; }, RecorderController::CountdownSettleMs + 150);
+            check(controller.state() == State::Starting, "fresh-frame wait remains cancellable");
+            controller.stop();
+        }
+        RecorderControllerTestPeer::frame(controller, settledFrame, false);
+        waitUntil([] { return false; }, 150);
+        check(controller.state() == State::Idle && !RecorderControllerTestPeer::writerStarted(controller)
+                  && filesIn(directory.path()).isEmpty() && errors == int(timeout),
+              "cancelled or expired fresh-frame waits ignore late images and leave no file");
     }
 
     {   // The target disappears while counting down.

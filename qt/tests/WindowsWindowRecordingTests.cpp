@@ -93,6 +93,7 @@ int main(int argc, char **argv) {
     RecorderController controller;
     RecordingOptions options;
     options.microphone = false; options.fps = fps; options.maxEdge = 1280;
+    options.startDelaySeconds = app.arguments().contains(QStringLiteral("--countdown")) ? 3 : 0;
     QVideoSink preview, decoded;
     controller.setVideoSink(&preview);
     QMediaPlayer player;

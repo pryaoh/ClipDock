@@ -54,8 +54,7 @@ public:
     // During Countdown this cancels the pending start: back to Preview if it began there, otherwise Idle.
     void stop();
     int countdownRemaining() const { return m_countdownRemaining; }
-    // Time between the end of the countdown and the encoder start, so that the countdown
-    // display, minimization and capture exclusion settle before the first recorded frame.
+    // Minimum time before accepting a fresh post-countdown capture frame.
     static constexpr int CountdownSettleMs = 300;
 
 signals:
@@ -125,5 +124,6 @@ private:
     int m_countdownRemaining = 0;
     bool m_countdownFromPreview = false;
     bool m_aboutToStartEmitted = false;
+    bool m_waitingForCountdownFrame = false;
     quint64 m_generation = 0;
 };
