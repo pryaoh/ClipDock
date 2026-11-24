@@ -9,6 +9,7 @@ GlobalShortcuts::GlobalShortcuts(QWidget *window, std::unique_ptr<ShortcutBacken
     for (auto action : shortcutActions) {
         const auto i = int(action);
         m_local[i] = new QShortcut(shortcutKey(action), window);
+        m_local[i]->setContext(Qt::ApplicationShortcut); // Also available when the independent recording bar has focus.
         m_local[i]->setObjectName(QStringLiteral("captureShortcut%1").arg(i));
         m_local[i]->setAutoRepeat(false);
         connect(m_local[i], &QShortcut::activated, this, [this, action, i] {

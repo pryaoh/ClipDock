@@ -92,6 +92,7 @@ endif()
 qt_add_executable(ClipDock WIN32 MACOSX_BUNDLE
     qt/src/main.cpp
     qt/src/MainWindow.cpp qt/src/MainWindow.h qt/src/UiTheme.h
+    qt/src/RecordingBar.cpp qt/src/RecordingBar.h
     qt/src/RecorderController.cpp qt/src/RecorderController.h
     qt/src/RecordingOptions.h qt/src/MediaFormat.cpp qt/src/MediaFormat.h
     qt/src/PlatformPermissions.cpp qt/src/PlatformPermissions.h
@@ -245,6 +246,7 @@ if(BUILD_TESTING)
 
     qt_add_executable(main_window_tests qt/tests/MainWindowTests.cpp
         qt/src/MainWindow.cpp qt/src/MainWindow.h qt/src/UiTheme.h qt/src/RecorderController.cpp qt/src/RecorderController.h
+        qt/src/RecordingBar.cpp qt/src/RecordingBar.h
         qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp qt/src/RegionPicker.cpp qt/src/RegionPicker.h
         qt/src/WindowPicker.cpp qt/src/WindowPicker.h qt/src/NativeWindowPicker.cpp)
     target_include_directories(main_window_tests PRIVATE qt/src)
@@ -268,6 +270,8 @@ if(BUILD_TESTING)
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         ENVIRONMENT "QT_SCALE_FACTOR_ROUNDING_POLICY=PassThrough")
     add_test(NAME main_window COMMAND main_window_tests)
+    add_test(NAME recording_bar COMMAND main_window_tests --recording-bar)
+    set_tests_properties(recording_bar PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     set_tests_properties(main_window PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_test(NAME main_window_startup_policy COMMAND main_window_tests --startup-policy)
     add_test(NAME main_window_move_into_capture COMMAND main_window_tests --move-into-capture)
@@ -275,6 +279,13 @@ if(BUILD_TESTING)
         PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     if(WIN32)
         add_test(NAME main_window_capture_affinity COMMAND main_window_tests --capture-affinity)
+        if(CLIPDOCK_DESKTOP_TESTS)
+            add_test(NAME recording_bar_excluded_movie COMMAND main_window_tests --recording-bar-movie)
+            add_test(NAME recording_bar_visible_movie COMMAND main_window_tests --recording-bar-movie --include-bar)
+            set_tests_properties(recording_bar_excluded_movie recording_bar_visible_movie PROPERTIES
+                TIMEOUT 35 RUN_SERIAL TRUE LABELS desktop ENVIRONMENT "QT_QPA_PLATFORM=windows;QT_MEDIA_BACKEND=ffmpeg")
+            set_tests_properties(recording_bar_excluded_movie PROPERTIES SKIP_RETURN_CODE 77)
+        endif()
         set_tests_properties(main_window_capture_affinity PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=windows")
     endif()
     add_test(NAME main_window_multiple_screens COMMAND main_window_tests --multi-screen
@@ -314,6 +325,7 @@ if(BUILD_TESTING)
             if(CLIPDOCK_OPENBOX AND CLIPDOCK_XDOTOOL AND CLIPDOCK_XMESSAGE AND CLIPDOCK_XPROP)
                 qt_add_executable(x11_capture_exclusion_tests qt/tests/X11CaptureExclusionTests.cpp
                     qt/src/MainWindow.cpp qt/src/MainWindow.h qt/src/UiTheme.h
+                    qt/src/RecordingBar.cpp qt/src/RecordingBar.h
                     qt/src/RecorderController.cpp qt/src/RecorderController.h
                     qt/src/MediaFormat.cpp qt/src/PlatformPermissions.cpp
                     qt/src/RegionPicker.cpp qt/src/RegionPicker.h

@@ -272,6 +272,7 @@ MainWindow::MainWindow() {
         QSettings().setValue(QStringLiteral("capture/excludeSelf"), checked);
         applyCaptureExclusion();
         updatePreview();
+        updateRecordingBar();
     });
     connect(m_minimizeRecording, &QCheckBox::toggled, this, [](bool checked) {
         QSettings().setValue(QStringLiteral("capture/minimizeRecording"), checked);
@@ -395,9 +396,11 @@ MainWindow::MainWindow() {
     connect(qApp, &QGuiApplication::screenAdded, this, [this](QScreen *screen) {
         watchScreen(screen);
         if (m_controller.state() == RecorderController::State::Idle) refreshTargets();
+        updateRecordingBar();
     });
     connect(qApp, &QGuiApplication::screenRemoved, this, [this] {
         if (m_controller.state() == RecorderController::State::Idle) refreshTargets();
+        updateRecordingBar();
     });
     connect(m_record, &QPushButton::clicked, this, [this] { begin(true); });
     connect(m_preview, &QPushButton::clicked, this, [this] { begin(false); });
@@ -441,6 +444,7 @@ MainWindow::MainWindow() {
         const auto seconds = milliseconds / 1000;
         m_clock->setText(QStringLiteral("%1:%2:%3").arg(seconds / 3600, 2, 10, QLatin1Char('0'))
             .arg(seconds / 60 % 60, 2, 10, QLatin1Char('0')).arg(seconds % 60, 2, 10, QLatin1Char('0')));
+        if (m_recordingBar) m_recordingBar->setDuration(m_clock->text());
     });
     m_shortcuts = new GlobalShortcuts(this);
     connect(m_shortcuts, &GlobalShortcuts::activated, this, &MainWindow::dispatchShortcut);
@@ -466,7 +470,8 @@ MainWindow::MainWindow() {
         QList<WId> windows;
         if (m_excludeSelf->isChecked()) {
             for (auto *widget : QApplication::topLevelWidgets()) {
-                if (ownedBy(widget, this) && widget->internalWinId()) windows.append(widget->internalWinId());
+                if ((widget == m_recordingBar.get() || ownedBy(widget, this)) && widget->internalWinId())
+                    windows.append(widget->internalWinId());
             }
         }
         return windows;
@@ -530,8 +535,10 @@ void MainWindow::resetPreferences() {
 void MainWindow::watchScreen(QScreen *screen) {
     const auto changed = [this] {
         if (m_controller.state() == RecorderController::State::Idle) refreshTargets();
+        updateRecordingBar();
     };
     connect(screen, &QScreen::geometryChanged, this, changed);
+    connect(screen, &QScreen::availableGeometryChanged, this, &MainWindow::updateRecordingBar);
     connect(screen, &QScreen::logicalDotsPerInchChanged, this, changed);
     connect(screen, &QScreen::physicalDotsPerInchChanged, this, changed);
 }
@@ -837,6 +844,8 @@ void MainWindow::updateState(RecorderController::State state) {
     case State::Stopping: badge = QStringLiteral("마무리 중"); tone = QStringLiteral("active"); break;
     }
     m_stateBadge->setText(QStringLiteral("●  %1").arg(badge));
+    if (idle) m_barDismissed = false;
+    updateRecordingBar();
     if (m_stateBadge->property("tone").toString() != tone) {
         m_stateBadge->setProperty("tone", tone);
         m_stateBadge->style()->unpolish(m_stateBadge);
@@ -866,8 +875,13 @@ bool MainWindow::event(QEvent *event) {
     if (m_captureReady && (event->type() == QEvent::Move || event->type() == QEvent::Resize
         || event->type() == QEvent::Show || event->type() == QEvent::WindowStateChange)) {
         updatePreview();
-        if (event->type() == QEvent::WindowStateChange && !isMinimized())
-            m_autoMinimized = false; // The user restored it; don't override their next choice.
+        if (event->type() == QEvent::WindowStateChange) {
+            if (!isMinimized()) {
+                m_autoMinimized = false;
+                m_barDismissed = false;
+            }
+            updateRecordingBar();
+        }
         if (m_captureState == RecorderController::State::Recording && !m_fallbackPausePending) {
             // Qt may deliver state changes before the restored window becomes visible.
             // Check after the event sequence, and coalesce movement/resize/show notifications.
@@ -930,6 +944,51 @@ void MainWindow::minimizeForRecording() {
     m_restoreMaximized = isMaximized();
     m_autoMinimized = true;
     showMinimized(); // Retain a taskbar/Dock entry even if global shortcuts fail.
+}
+
+void MainWindow::updateRecordingBar() {
+    using State = RecorderController::State;
+    const bool active = m_captureState == State::Recording || m_captureState == State::Paused;
+    if (!active || !isMinimized() || m_barDismissed || m_closing) {
+        if (m_recordingBar) m_recordingBar->hide();
+        return;
+    }
+    if (!m_recordingBar) {
+        // An owned native tool window would disappear with its minimized owner.
+        m_recordingBar = std::make_unique<RecordingBar>();
+        connect(m_recordingBar.get(), &RecordingBar::pauseRequested, this,
+                [this] { dispatchShortcut(ShortcutAction::Pause); });
+        connect(m_recordingBar.get(), &RecordingBar::stopRequested, this,
+                [this] { dispatchShortcut(ShortcutAction::Stop); });
+        connect(m_recordingBar.get(), &RecordingBar::restoreRequested, this, [this] {
+            setWindowState(windowState() & ~Qt::WindowMinimized);
+            show(); raise(); activateWindow();
+        });
+        connect(m_recordingBar.get(), &RecordingBar::dismissed, this, [this] { m_barDismissed = true; });
+    }
+    auto &bar = *m_recordingBar;
+    bar.setDuration(m_clock->text());
+    bar.setRecordingState(m_captureState == State::Paused, m_audio->currentIndex() > 0);
+    const bool exclude = m_excludeSelf->isChecked();
+    bool barExcluded = false;
+#ifdef Q_OS_WIN
+    if (supportsCaptureExclusion()) {
+        // Set affinity on this independent HWND before the first visible frame.
+        barExcluded = SetWindowDisplayAffinity(reinterpret_cast<HWND>(bar.winId()),
+            exclude ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE) && exclude;
+    }
+#endif
+    QRect avoid;
+    const auto &target = m_controller.target();
+    if (exclude && !barExcluded && !target.isWindow) {
+        if (target.isPortal || !target.screen) {
+            bar.hide(); // The portal does not disclose the shared bounds.
+            return;
+        }
+        avoid = target.isRegion ? target.region.translated(target.screen->geometry().topLeft())
+                                : target.screen->geometry();
+    }
+    bar.setVisible(bar.place(screen(), avoid));
 }
 
 void MainWindow::updatePreview() {

@@ -4,7 +4,7 @@
 
 ①은 먼저 추가할 기능, ②는 다음 확장, ③은 장기 확장입니다.
 
-## 구현 상태 (2026-11-22)
+## 구현 상태 (2026-11-24)
 
 - [x] 영역 지정 녹화: 확장 모니터 선택과 혼합 DPI 좌표 처리 구현 (`ab3955b`).
 - [x] 자기 창 캡처 방지: 캡처 제외 기본 켜기, 녹화 시 최소화 별도 옵션과 저장,
@@ -32,9 +32,11 @@
 - [x] [카운트다운 #4](https://github.com/pryaoh/ClipDock/issues/4): `feat/recording-countdown`에 구현.
   바로 시작/3초/5초, 권한·첫 프레임 준비 뒤 카운트다운, Esc·시작 취소·중지 단축키 취소(파일 없음),
   반복 시작 차단, 카운트다운 종료 후 안정화된 화면으로 첫 프레임. 실제 데스크톱 확인은 #3과 함께 진행합니다.
+- [x] [작은 컨트롤바 #5](https://github.com/pryaoh/ClipDock/issues/5) 구현. 메인 창을 최소화하면
+  녹화 시간·마이크 상태 표시, 일시정지·재개, 중지 및 저장, 메인 창 복원을 제공합니다.
+  Windows에서 창 제외 설정을 켰을 때와 껐을 때 각각 실제 MP4를 디코딩해 확인했습니다.
 - [ ]
   [플랫폼 실환경 검증 #3](https://github.com/pryaoh/ClipDock/issues/3),
-  [작은 컨트롤바 #5](https://github.com/pryaoh/ClipDock/issues/5),
   [시스템 오디오+마이크 #6](https://github.com/pryaoh/ClipDock/issues/6)은 미완료입니다.
 - [ ] [설치파일 #7](https://github.com/pryaoh/ClipDock/issues/7)은 보류 상태입니다.
 

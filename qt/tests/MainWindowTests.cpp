@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QMouseEvent>
 #include <QMessageBox>
+#include <QMediaPlayer>
 #include <QPushButton>
 #include <QScreen>
 #include <QShortcut>
@@ -45,6 +46,75 @@ public:
 class MainWindowTestPeer {
 public:
     static void setState(MainWindow &window, RecorderController::State state) { window.updateState(state); }
+    static RecordingBar *bar(MainWindow &window) { return window.m_recordingBar.get(); }
+    static void checkRecordingBar(MainWindow &window) {
+        using State = RecorderController::State;
+        RecorderController::Target target;
+        target.screen = QGuiApplication::primaryScreen();
+        RecorderControllerTestPeer::prepare(window.m_controller, target, true);
+        window.m_excludeSelf->setChecked(false);
+        window.show();
+        window.showMinimized();
+        window.updateState(State::Countdown);
+        check(!window.m_recordingBar, "countdown does not create controls");
+        window.showNormal();
+        window.updateState(State::Recording);
+        check(!window.m_recordingBar, "recording with the main window open keeps a single control surface");
+        window.showMinimized();
+        QApplication::processEvents();
+        auto *bar = window.m_recordingBar.get();
+        check(bar && bar->isVisible(), "manual minimization opens the independent recording bar");
+        auto button = [&](const QString &text) {
+            for (auto *item : bar->findChildren<QPushButton *>()) if (item->text() == text) return item;
+            check(false, "recording bar action exists");
+            return static_cast<QPushButton *>(nullptr);
+        };
+        window.m_controller.durationChanged(3723000);
+        bool hasTime = false;
+        for (auto *label : bar->findChildren<QLabel *>()) hasTime |= label->text() == QStringLiteral("01:02:03");
+        check(hasTime, "bar displays the controller duration including hours");
+        const auto desktop = target.screen->availableGeometry();
+        const auto grip = bar->mapToGlobal(QPoint(8, 8));
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(8, 8), QPointF(grip),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(bar, &press);
+        const auto corner = desktop.bottomRight();
+        QMouseEvent drag(QEvent::MouseMove, QPointF(bar->mapFromGlobal(corner)), QPointF(corner),
+                         Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(bar, &drag);
+        check(bar->geometry().bottomRight() == corner, "dragging to the screen edge keeps every control reachable");
+        int pauses = 0, stops = 0;
+        const auto pause = QObject::connect(window.m_pause, &QPushButton::clicked, [&] { ++pauses; });
+        const auto stop = QObject::connect(window.m_stop, &QPushButton::clicked, [&] { ++stops; });
+        button(QStringLiteral("일시정지"))->click();
+        window.updateState(State::Paused);
+        button(QStringLiteral("재개"))->click();
+        button(QStringLiteral("중지 및 저장"))->click();
+        check(pauses == 2 && stops == 1, "both surfaces share pause, resume and stop actions");
+        QObject::disconnect(pause);
+        QObject::disconnect(stop);
+        button(QStringLiteral("숨기기"))->click();
+        window.updateState(State::Recording);
+        check(!bar->isVisible(), "a dismissed bar stays hidden through state changes");
+        window.showNormal();
+        window.showMinimized();
+        check(bar->isVisible(), "minimizing again reopens a dismissed bar");
+        button(QStringLiteral("메인 창"))->click();
+        check(!window.isMinimized() && !bar->isVisible(), "restoring the main window hides compact controls");
+        window.showMinimized();
+        window.updateState(State::Stopping);
+        check(!bar->isVisible(), "finalizing removes the control bar");
+        window.m_excludeSelf->setChecked(true);
+        window.updateState(State::Recording);
+        check(!bar->isVisible(), "full-screen fallback with no safe display hides the bar");
+        target.isRegion = true;
+        target.region = QRect(0, 0, 100, 100);
+        RecorderControllerTestPeer::prepare(window.m_controller, target, true);
+        window.updateState(State::Recording);
+        check(bar->isVisible() && !bar->geometry().intersects(target.region.translated(target.screen->geometry().topLeft())),
+              "region capture uses a safe position outside the captured rectangle");
+        window.updateState(State::Idle);
+    }
     static void checkCapturePreferences(MainWindow &window) {
         auto *exclude = window.findChild<QCheckBox *>(QStringLiteral("excludeSelfCheckBox"));
         auto *minimize = window.findChild<QCheckBox *>(QStringLiteral("minimizeRecordingCheckBox"));
@@ -562,6 +632,10 @@ int main(int argc, char **argv) {
         return 0;
     }
     MainWindow window;
+    if (app.arguments().contains(QStringLiteral("--recording-bar"))) {
+        MainWindowTestPeer::checkRecordingBar(window);
+        return 0;
+    }
     if (app.arguments().contains(QStringLiteral("--startup-policy"))) {
         MainWindowTestPeer::checkStartupVisible(window);
         return 0;
@@ -571,6 +645,74 @@ int main(int argc, char **argv) {
         return 0;
     }
 #ifdef Q_OS_WIN
+    if (app.arguments().contains(QStringLiteral("--recording-bar-movie"))) {
+        const bool exclude = !app.arguments().contains(QStringLiteral("--include-bar"));
+        if (exclude && QOperatingSystemVersion::current()
+                < QOperatingSystemVersion(QOperatingSystemVersion::Windows, 10, 0, 19041)) return 77;
+        window.findChild<QCheckBox *>(QStringLiteral("excludeSelfCheckBox"))->setChecked(exclude);
+        auto *screen = app.primaryScreen();
+        const QRect desktop = screen->availableGeometry();
+        const QRect strip(desktop.right() - qMin(720, desktop.width()) + 1, desktop.top(),
+                          qMin(720, desktop.width()), 120);
+        QWidget backdrop(nullptr, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+        backdrop.setStyleSheet(QStringLiteral("background: #00ff00;"));
+        backdrop.setGeometry(strip);
+        backdrop.show();
+        window.showMinimized();
+        auto &recorder = MainWindowTestPeer::controller(window);
+        const QString path = directory.filePath(QStringLiteral("bar.mp4"));
+        QPoint sample;
+        QVideoSink sink;
+        QMediaPlayer player;
+        player.setVideoSink(&sink);
+        int samples = 0;
+        QObject::connect(&recorder, &RecorderController::errorOccurred, [](const QString &message) {
+            std::cerr << message.toStdString() << '\n'; check(false, "desktop recording failed");
+        });
+        QObject::connect(&recorder, &RecorderController::stateChanged, &app, [&](auto state) {
+            if (state != RecorderController::State::Recording) return;
+            auto *bar = MainWindowTestPeer::bar(window);
+            check(bar && bar->isVisible(), "actual recording shows the bar with main minimized");
+            auto *marker = new QLabel(bar);
+            marker->setStyleSheet(QStringLiteral("background: #ff00ff;"));
+            marker->setGeometry(10, 5, 28, 22);
+            marker->show(); marker->raise(); bar->raise();
+            sample = marker->mapToGlobal(marker->rect().center()) - strip.topLeft();
+            check(QRect(QPoint(), strip.size()).contains(sample), "bar marker is inside the recorded strip");
+            QTimer::singleShot(2000, bar, [bar] { bar->stopRequested(); });
+        });
+        QObject::connect(&recorder, &RecorderController::saved, &app, [&](const QString &output) {
+            player.setSource(QUrl::fromLocalFile(output)); player.play();
+        });
+        QObject::connect(&sink, &QVideoSink::videoFrameChanged, &app, [&](const QVideoFrame &frame) {
+            if (!frame.isValid() || frame.startTime() < 500000 || frame.startTime() > 1500000) return;
+            const QImage image = frame.toImage();
+            check(!image.isNull(), "decode the saved recording");
+            const auto color = image.pixelColor(sample.x() * image.width() / strip.width(),
+                                                sample.y() * image.height() / strip.height());
+            check(exclude ? color.green() > 180 && color.red() < 70 && color.blue() < 70
+                          : color.green() < 70 && color.red() > 180 && color.blue() > 180,
+                  "saved pixels match the bar exclusion preference");
+            ++samples;
+        });
+        QObject::connect(&player, &QMediaPlayer::mediaStatusChanged, &app, [&](auto status) {
+            if (status != QMediaPlayer::EndOfMedia) return;
+            check(samples >= 5, "inspect multiple decoded frames while the bar is visible");
+            app.exit(0);
+        });
+        QTimer::singleShot(500, &app, [&] {
+            RecorderController::Target target;
+            target.screen = screen;
+            target.isRegion = true;
+            target.regionScreenSize = screen->size();
+            target.region = strip.translated(-screen->geometry().topLeft());
+            RecordingOptions options;
+            options.fps = 10; // Sample overlay pixels; the scheduler suite covers encoder throughput.
+            recorder.start(target, options, {}, QMediaFormat::VideoCodec::H264, path);
+        });
+        QTimer::singleShot(25000, &app, [] { check(false, "bar recording and decode deadline"); });
+        return app.exec();
+    }
     if (app.arguments().contains(QStringLiteral("--capture-exclusion"))) {
         // Opt-in desktop test: prove pixels behind ClipDock are captured, not a
         // black rectangle or the recorder itself. No desktop images are saved.

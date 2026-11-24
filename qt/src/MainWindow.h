@@ -1,9 +1,11 @@
 #pragma once
 #include "RecorderController.h"
 #include "RecordingPreferences.h"
+#include "RecordingBar.h"
 #include <QMainWindow>
 #include <QMediaDevices>
 #include <QList>
+#include <memory>
 
 class QComboBox;
 class QCheckBox;
@@ -47,6 +49,7 @@ private:
     bool overlapsCapture() const;
     bool needsFallbackMinimize() const;
     void minimizeForRecording();
+    void updateRecordingBar();
     void showError(const QString &message);
     void dispatchShortcut(ShortcutAction action, const QString &activationToken = QString());
 
@@ -98,5 +101,7 @@ private:
     bool m_autoMinimized = false;
     bool m_restoreMaximized = false;
     bool m_fallbackPausePending = false;
+    std::unique_ptr<RecordingBar> m_recordingBar;
+    bool m_barDismissed = false;
     RecorderController::State m_captureState = RecorderController::State::Idle;
 };
